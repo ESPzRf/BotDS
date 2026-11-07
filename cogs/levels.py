@@ -56,6 +56,10 @@ def _as_float(value: Any, default: float = 1.0) -> float:
 
 
 class Levels(commands.Cog):
+    levels = app_commands.Group(
+        name="levels",
+        description="Уровни, топ и ежедневная награда",
+    )
     levelconfig = app_commands.Group(
         name="levelconfig",
         description="Настройка уровней и лояльности",
@@ -392,7 +396,7 @@ class Levels(commands.Cog):
 
     # --------------------------------------------------------------- commands
 
-    @app_commands.command(name="rank", description="Показать уровень, опыт и лояльность")
+    @levels.command(name="rank", description="Показать уровень, опыт и лояльность")
     @app_commands.describe(member="Чей профиль показать (по умолчанию — ваш)")
     async def rank(
         self,
@@ -420,7 +424,7 @@ class Levels(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="leaderboard", description="Топ участников по опыту или лояльности")
+    @levels.command(name="leaderboard", description="Топ участников по опыту или лояльности")
     @app_commands.choices(metric=METRIC_CHOICES)
     @app_commands.describe(metric="По чему сортировать")
     async def leaderboard(
@@ -458,7 +462,7 @@ class Levels(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="daily", description="Получить ежедневную награду лояльности")
+    @levels.command(name="daily", description="Получить ежедневную награду лояльности")
     async def daily(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         member = interaction.user

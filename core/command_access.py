@@ -116,3 +116,20 @@ REASON_MESSAGES = {
     "denied": "Вам запрещён доступ к этой команде.",
     "not_allowed": "Команда доступна только определённым ролям или пользователям.",
 }
+
+# Старые одиночные команды -> новые пути после перехода на группы.
+LEGACY_COMMANDS = {
+    "warn": "mod warn",
+    "warnings": "mod warnings",
+    "unwarn": "mod unwarn",
+    "clearwarnings": "mod clearwarnings",
+    "rank": "levels rank",
+    "leaderboard": "levels leaderboard",
+    "daily": "levels daily",
+    "buy": "shop buy",
+    "balance": "shop balance",
+    "appeal": "appeals submit",
+    "help": "utility help",
+    "ping": "utility ping",
+    "botinfo": "utility botinfo",
+}

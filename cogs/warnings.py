@@ -46,6 +46,11 @@ def describe_rule(rule: dict[str, Any]) -> str:
 
 
 class Warnings(commands.Cog):
+    mod = app_commands.Group(
+        name="mod",
+        description="Предупреждения и действия модераторов",
+        default_permissions=discord.Permissions(moderate_members=True),
+    )
     warnconfig = app_commands.Group(
         name="warnconfig",
         description="Настройка предупреждений и автонаказаний",
@@ -57,7 +62,7 @@ class Warnings(commands.Cog):
 
     # --------------------------------------------------------------- commands
 
-    @app_commands.command(name="warn", description="Выдать предупреждение участнику")
+    @mod.command(name="warn", description="Выдать предупреждение участнику")
     @app_commands.describe(member="Нарушитель", reason="Причина предупреждения")
     @app_commands.default_permissions(moderate_members=True)
     async def warn(
@@ -95,7 +100,7 @@ class Warnings(commands.Cog):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="warnings", description="Показать активные предупреждения участника")
+    @mod.command(name="warnings", description="Показать активные предупреждения участника")
     @app_commands.describe(member="Участник")
     @app_commands.default_permissions(moderate_members=True)
     async def warnings_list(
@@ -154,8 +159,8 @@ class Warnings(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="unwarn", description="Снять предупреждение по ID")
-    @app_commands.describe(warning_id="ID предупреждения (из /warnings)", reason="Причина снятия")
+    @mod.command(name="unwarn", description="Снять предупреждение по ID")
+    @app_commands.describe(warning_id="ID предупреждения (из /mod warnings)", reason="Причина снятия")
     @app_commands.default_permissions(moderate_members=True)
     async def unwarn(
         self,
@@ -186,7 +191,7 @@ class Warnings(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="clearwarnings", description="Снять все предупреждения участника")
+    @mod.command(name="clearwarnings", description="Снять все предупреждения участника")
     @app_commands.describe(member="Участник, чьи предупреждения нужно снять")
     @app_commands.default_permissions(moderate_members=True)
     async def clearwarnings(

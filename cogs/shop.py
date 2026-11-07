@@ -53,7 +53,7 @@ class Shop(commands.Cog):
                 ),
                 inline=False,
             )
-        embed.set_footer(text="Купить: /buy item_id")
+        embed.set_footer(text="Купить: /shop buy item_id")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @shop.command(name="add", description="Добавить товар в магазин")
@@ -116,7 +116,7 @@ class Shop(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name="buy", description="Купить товар за баллы лояльности")
+    @shop.command(name="buy", description="Купить товар за баллы лояльности")
     @app_commands.describe(item_id="ID товара из /shop list")
     async def buy(self, interaction: discord.Interaction, item_id: int) -> None:
         guild = interaction.guild
@@ -170,7 +170,7 @@ class Shop(commands.Cog):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="balance", description="Показать баланс лояльности")
+    @shop.command(name="balance", description="Показать баланс лояльности")
     async def balance(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         member = interaction.user

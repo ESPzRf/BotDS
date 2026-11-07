@@ -60,8 +60,7 @@ class AppealReviewView(discord.ui.View):
 class Appeals(commands.Cog):
     appeals = app_commands.Group(
         name="appeals",
-        description="Настройка апелляций",
-        default_permissions=discord.Permissions(manage_guild=True),
+        description="Апелляции предупреждений",
     )
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -212,8 +211,8 @@ class Appeals(commands.Cog):
 
     # --------------------------------------------------------------- commands
 
-    @app_commands.command(name="appeal", description="Подать апелляцию на предупреждение")
-    @app_commands.describe(warning_id="ID предупреждения из /warnings", reason="Почему стоит снять предупреждение")
+    @appeals.command(name="submit", description="Подать апелляцию на предупреждение")
+    @app_commands.describe(warning_id="ID предупреждения из /mod warnings", reason="Почему стоит снять предупреждение")
     async def appeal(
         self,
         interaction: discord.Interaction,
@@ -269,6 +268,7 @@ class Appeals(commands.Cog):
         )
 
     @appeals.command(name="list", description="Ожидающие апелляции")
+    @app_commands.default_permissions(manage_guild=True)
     async def appeals_list(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         if guild is None:
@@ -299,6 +299,7 @@ class Appeals(commands.Cog):
 
     @appeals.command(name="channel", description="Канал для апелляций")
     @app_commands.describe(channel="Канал; без параметра — канал модерации")
+    @app_commands.default_permissions(manage_guild=True)
     async def appeals_channel(
         self,
         interaction: discord.Interaction,

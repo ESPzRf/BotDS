@@ -117,6 +117,7 @@ class ModerationBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.db.connect()
+        await self.repos.access.migrate_legacy()
 
         for extension in EXTENSIONS:
             await self.load_extension(extension)

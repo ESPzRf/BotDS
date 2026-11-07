@@ -48,6 +48,8 @@ class CommandTreeTests(unittest.IsolatedAsyncioTestCase):
         top_level = self.bot.tree.get_commands()
         self.assertLessEqual(len(top_level), 100)
         self.assertEqual(len({command.name for command in top_level}), len(top_level))
+        for command in top_level:
+            self.assertIsInstance(command, app_commands.Group, f"/{command.name} вне группы")
 
         for item in self.bot.tree.walk_commands():
             if isinstance(item, app_commands.Group):

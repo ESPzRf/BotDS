@@ -24,6 +24,30 @@ from core.utils import truncate
 log = logging.getLogger(__name__)
 
 
+async def command_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    """Подсказывает группы и команды, чтобы не вводить путь вручную."""
+
+    tree = getattr(interaction.client, "tree", None)
+    if tree is None:
+        return []
+    query = (current or "").strip().lstrip("/").casefold()
+    names: set[str] = set()
+    for command in tree.walk_commands():
+        parts = command.qualified_name.split()
+        for index in range(1, len(parts) + 1):
+            names.add(" ".join(parts[:index]))
+    ordered = sorted(names, key=lambda item: (item.count(" "), item))
+    if query:
+        exact = [item for item in ordered if item.casefold() == query]
+        prefix = [item for item in ordered if item.casefold().startswith(query) and item not in exact]
+        rest = [item for item in ordered if query in item.casefold() and item not in exact and item not in prefix]
+        ordered = exact + prefix + rest
+    return [app_commands.Choice(name=item[:100], value=item) for item in ordered[:25]]
+
+
 def _role_list(ids: set[int]) -> str:
     return ", ".join(f"<@&{role_id}>" for role_id in sorted(ids)) or "—"
 
@@ -115,6 +139,7 @@ class Access(commands.Cog):
 
     @access.command(name="allow-role", description="Разрешить команду только указанной роли")
     @app_commands.describe(command="Команда, например levelconfig add-xp", role="Роль")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def allow_role(
         self,
         interaction: discord.Interaction,
@@ -132,6 +157,7 @@ class Access(commands.Cog):
 
     @access.command(name="remove-role", description="Убрать роль из списка разрешённых")
     @app_commands.describe(command="Команда", role="Роль")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def remove_role(
         self,
         interaction: discord.Interaction,
@@ -145,6 +171,7 @@ class Access(commands.Cog):
 
     @access.command(name="allow-user", description="Разрешить команду конкретному пользователю")
     @app_commands.describe(command="Команда", user="Пользователь (можно по ID)")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def allow_user(
         self,
         interaction: discord.Interaction,
@@ -159,6 +186,7 @@ class Access(commands.Cog):
 
     @access.command(name="remove-user", description="Убрать пользователя из разрешённых")
     @app_commands.describe(command="Команда", user="Пользователь")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def remove_user(
         self,
         interaction: discord.Interaction,
@@ -172,6 +200,7 @@ class Access(commands.Cog):
 
     @access.command(name="deny-role", description="Запретить команду указанной роли")
     @app_commands.describe(command="Команда", role="Роль")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def deny_role(
         self,
         interaction: discord.Interaction,
@@ -189,6 +218,7 @@ class Access(commands.Cog):
 
     @access.command(name="undeny-role", description="Убрать роль из запрещённых")
     @app_commands.describe(command="Команда", role="Роль")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def undeny_role(
         self,
         interaction: discord.Interaction,
@@ -202,6 +232,7 @@ class Access(commands.Cog):
 
     @access.command(name="deny-user", description="Запретить команду пользователю")
     @app_commands.describe(command="Команда", user="Пользователь")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def deny_user(
         self,
         interaction: discord.Interaction,
@@ -216,6 +247,7 @@ class Access(commands.Cog):
 
     @access.command(name="undeny-user", description="Убрать пользователя из запрещённых")
     @app_commands.describe(command="Команда", user="Пользователь")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def undeny_user(
         self,
         interaction: discord.Interaction,
@@ -229,6 +261,7 @@ class Access(commands.Cog):
 
     @access.command(name="disable", description="Полностью отключить команду на сервере")
     @app_commands.describe(command="Команда")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def disable(self, interaction: discord.Interaction, command: str) -> None:
         def mutate(rule: CommandRule) -> None:
             rule.enabled = False
@@ -237,6 +270,7 @@ class Access(commands.Cog):
 
     @access.command(name="enable", description="Включить команду обратно")
     @app_commands.describe(command="Команда")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def enable(self, interaction: discord.Interaction, command: str) -> None:
         def mutate(rule: CommandRule) -> None:
             rule.enabled = True
@@ -245,6 +279,7 @@ class Access(commands.Cog):
 
     @access.command(name="reset", description="Снять все ограничения с команды")
     @app_commands.describe(command="Команда")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def reset(self, interaction: discord.Interaction, command: str) -> None:
         guild = interaction.guild
         if guild is None:
@@ -261,6 +296,7 @@ class Access(commands.Cog):
 
     @access.command(name="list", description="Показать ограничения команд")
     @app_commands.describe(command="Конкретная команда (необязательно)")
+    @app_commands.autocomplete(command=command_autocomplete)
     async def list_rules(
         self,
         interaction: discord.Interaction,

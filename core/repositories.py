@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from core.command_access import CommandRule, normalize_command
+from core.command_access import LEGACY_COMMANDS, CommandRule, normalize_command
 from core.database import Database
 
 # ---------------------------------------------------------------------------
@@ -1396,6 +1396,24 @@ class CommandAccessRepo:
 
     async def delete_all(self, guild_id: int) -> int:
         return await self.db.execute("DELETE FROM command_access WHERE guild_id = ?", (guild_id,))
+
+    async def migrate_legacy(self) -> None:
+        """Переносит правила старых одиночных команд на новые пути групп."""
+
+        for old, new in LEGACY_COMMANDS.items():
+            rows = await self.db.fetchall(
+                "SELECT guild_id FROM command_access WHERE command = ?",
+                (old,),
+            )
+            for row in rows:
+                guild_id = int(row["guild_id"])
+                if await self.get(guild_id, new) is not None:
+                    await self.delete(guild_id, old)
+                else:
+                    await self.db.execute(
+                        "UPDATE command_access SET command = ? WHERE guild_id = ? AND command = ?",
+                        (new, guild_id, old),
+                    )
 
 
 def _command_rule_from_row(row: Any | None) -> CommandRule | None:

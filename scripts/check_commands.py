@@ -71,6 +71,9 @@ async def main() -> int:
         top_level = bot.tree.get_commands()
         if len(top_level) > 100:
             issues.append(f"Слишком много top-level команд: {len(top_level)} > 100")
+        for command in top_level:
+            if not isinstance(command, app_commands.Group):
+                issues.append(f"/{command.name}: top-level команда вне группы")
 
         seen: set[str] = set()
         for command in top_level:
