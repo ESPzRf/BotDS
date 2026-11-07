@@ -73,21 +73,46 @@ def pack_lines(lines: list[str], limit: int = 1000) -> list[str]:
     return chunks
 
 
-class Utility(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
-        self.bot = bot
+PAGE_VALUE_BUDGET = 3600
+PAGE_FIELD_LIMIT = 8
 
-    @app_commands.command(name="help", description="Список команд бота")
-    async def help_command(self, interaction: discord.Interaction) -> None:
-        sections: dict[int, list[str]] = {index: [] for index in range(len(SECTION_ORDER))}
 
-        for command in self.bot.tree.walk_commands():
-            if not isinstance(command, app_commands.Command):
-                continue
-            root = command.root_parent.name if command.root_parent else command.name
-            index = ROOT_SECTION.get(root, len(SECTION_ORDER) - 1)
-            sections[index].append(f"`/{command.qualified_name}` — {command.description}")
+def build_help_pages(bot: commands.Bot) -> list[discord.Embed]:
+    """Собирает help по страницам, чтобы не превысить лимит embed в 6000 символов."""
 
+    sections: dict[int, list[str]] = {index: [] for index in range(len(SECTION_ORDER))}
+    for command in bot.tree.walk_commands():
+        if not isinstance(command, app_commands.Command):
+            continue
+        root = command.root_parent.name if command.root_parent else command.name
+        index = ROOT_SECTION.get(root, len(SECTION_ORDER) - 1)
+        sections[index].append(f"`/{command.qualified_name}` — {command.description}")
+
+    fields: list[tuple[str, str]] = []
+    for index, title in enumerate(SECTION_ORDER):
+        lines = sections[index]
+        for part_index, part in enumerate(pack_lines(lines)):
+            name = title if part_index == 0 else f"{title} (продолжение)"
+            fields.append((name, part))
+
+    page_fields: list[list[tuple[str, str]]] = []
+    current: list[tuple[str, str]] = []
+    current_size = 0
+    for name, value in fields:
+        if current and (current_size + len(value) > PAGE_VALUE_BUDGET or len(current) >= PAGE_FIELD_LIMIT):
+            page_fields.append(current)
+            current = []
+            current_size = 0
+        current.append((name, value))
+        current_size += len(value)
+    if current:
+        page_fields.append(current)
+    if not page_fields:
+        page_fields = [[]]
+
+    total_commands = sum(len(lines) for lines in sections.values())
+    pages: list[discord.Embed] = []
+    for page_index, page in enumerate(page_fields, start=1):
         embed = base_embed(
             title="🤖 Команды модерации",
             description=(
@@ -96,18 +121,66 @@ class Utility(commands.Cog):
             ),
             color=COLOR_PRIMARY,
         )
+        for name, value in page:
+            embed.add_field(name=name, value=value, inline=False)
+        embed.set_footer(
+            text=f"Страница {page_index}/{len(page_fields)} • всего команд: {total_commands}"
+        )
+        pages.append(embed)
+    return pages
 
-        for index, title in enumerate(SECTION_ORDER):
-            lines = sections[index]
-            if not lines:
-                continue
-            for part_index, part in enumerate(pack_lines(lines)):
-                name = title if part_index == 0 else f"{title} (продолжение)"
-                embed.add_field(name=name, value=part, inline=False)
 
-        total = len(list(self.bot.tree.walk_commands()))
-        embed.set_footer(text=f"Всего команд: {total} • Ошибка? Проверьте права бота")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+class HelpView(discord.ui.View):
+    def __init__(self, author_id: int, pages: list[discord.Embed]) -> None:
+        super().__init__(timeout=180)
+        self.author_id = author_id
+        self.pages = pages
+        self.index = 0
+
+        self.prev_button = discord.ui.Button(label="◀ Назад", style=discord.ButtonStyle.secondary)
+        self.prev_button.callback = self._prev
+        self.add_item(self.prev_button)
+
+        self.next_button = discord.ui.Button(label="Вперёд ▶", style=discord.ButtonStyle.primary)
+        self.next_button.callback = self._next
+        self.add_item(self.next_button)
+        self._sync_buttons()
+
+    def _sync_buttons(self) -> None:
+        self.prev_button.disabled = self.index <= 0
+        self.next_button.disabled = self.index >= len(self.pages) - 1
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "Это меню открыл другой пользователь. Запустите `/help` сами.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        if self.index > 0:
+            self.index -= 1
+            self._sync_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        if self.index < len(self.pages) - 1:
+            self.index += 1
+            self._sync_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
+
+class Utility(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+
+    @app_commands.command(name="help", description="Список команд бота")
+    async def help_command(self, interaction: discord.Interaction) -> None:
+        pages = build_help_pages(self.bot)
+        view = HelpView(interaction.user.id, pages) if len(pages) > 1 else None
+        await interaction.response.send_message(embed=pages[0], view=view, ephemeral=True)
 
     @app_commands.command(name="ping", description="Проверить задержку бота и базы данных")
     async def ping(self, interaction: discord.Interaction) -> None:

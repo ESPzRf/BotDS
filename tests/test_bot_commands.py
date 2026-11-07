@@ -78,6 +78,21 @@ class CommandTreeTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(item, app_commands.Command):
                 self.assertIsNotNone(item.binding, f"{item.qualified_name}: нет cog")
 
+    async def test_help_pages_fit_discord_limits(self) -> None:
+        from cogs.utility import build_help_pages
+
+        pages = build_help_pages(self.bot)
+        self.assertTrue(pages)
+        for number, page in enumerate(pages, start=1):
+            self.assertLessEqual(len(page.fields), 25)
+            total = len(page.title or "") + len(page.description or "")
+            total += sum(len(field.name) + len(field.value) for field in page.fields)
+            self.assertLessEqual(total, 5800, f"страница {number} слишком большая")
+            self.assertLessEqual(len(page.description or ""), 4096)
+            for field in page.fields:
+                self.assertLessEqual(len(field.name), 256)
+                self.assertLessEqual(len(field.value), 1024)
+
 
 if __name__ == "__main__":
     unittest.main()
