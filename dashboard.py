@@ -33,7 +33,15 @@ def main() -> int:
         log.warning("DASHBOARD_DEV_MODE включён: вход без Discord OAuth. Не используйте в продакшене.")
 
     app = create_app(config)
-    uvicorn.run(app, host=config.host, port=config.port, log_level="info")
+    uvicorn.run(
+        app,
+        host=config.host,
+        port=config.port,
+        log_level="info",
+        proxy_headers=True,
+        ssl_certfile=config.ssl_cert,
+        ssl_keyfile=config.ssl_key,
+    )
     return 0
 
 

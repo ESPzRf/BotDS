@@ -27,6 +27,8 @@ class DashboardConfig:
     dev_mode: bool
     dev_guild_id: int | None
     dev_user_id: int | None
+    ssl_cert: str | None = None
+    ssl_key: str | None = None
 
     @classmethod
     def load(cls, base_dir: Path | None = None) -> "DashboardConfig":
@@ -45,6 +47,13 @@ class DashboardConfig:
             except ValueError:
                 log.warning("%s должен быть числом, получено %r", name, value)
                 return None
+
+        def optional_path(name: str) -> str | None:
+            value = env(name)
+            if not value:
+                return None
+            path = Path(value)
+            return str(path if path.is_absolute() else base / path)
 
         bot_token = env("DISCORD_TOKEN")
         if not bot_token or bot_token == "PASTE_TOKEN_HERE":
@@ -83,6 +92,11 @@ class DashboardConfig:
                 "Для DASHBOARD_DEV_MODE=1 задайте DASHBOARD_DEV_GUILD_ID (ID сервера)."
             )
 
+        ssl_cert = optional_path("DASHBOARD_SSL_CERT")
+        ssl_key = optional_path("DASHBOARD_SSL_KEY")
+        if bool(ssl_cert) != bool(ssl_key):
+            raise RuntimeError("Задайте оба файла: DASHBOARD_SSL_CERT и DASHBOARD_SSL_KEY.")
+
         return cls(
             bot_token=bot_token,
             client_id=env("DISCORD_CLIENT_ID"),
@@ -92,6 +106,8 @@ class DashboardConfig:
             host=host,
             port=port,
             db_target=db_target,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
             dev_mode=dev_mode,
             dev_guild_id=dev_guild_id,
             dev_user_id=dev_user_id,

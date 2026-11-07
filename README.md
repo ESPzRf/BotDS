@@ -473,6 +473,56 @@ DASHBOARD_PORT=8080
 Для входа нужны права **Управлять сервером**. Бот должен быть на сервере —
 панель читает каналы и роли через его токен.
 
+### Запуск на IP `84.201.132.67`
+
+В `.env` на хосте:
+
+```dotenv
+DASHBOARD_HOST=0.0.0.0
+DASHBOARD_PORT=8080
+DASHBOARD_BASE_URL=http://84.201.132.67:8080
+```
+
+`0.0.0.0` обязателен: если оставить `127.0.0.1`, панель будет доступна только
+внутри самого сервера. После запуска проверьте:
+
+```bash
+curl http://84.201.132.67:8080/healthz
+```
+
+Ожидаемый ответ: `{"status":"ok"}`. Также откройте порт в firewall/security group:
+
+```bash
+sudo ufw allow 8080/tcp
+```
+
+Redirect URI в Discord Developer Portal:
+
+```
+http://84.201.132.67:8080/auth/callback
+```
+
+Важно: Discord требует **HTTPS** для OAuth в production и может отклонить
+HTTP-redirect на IP. Если Developer Portal не принимает такой URI, используйте
+домен и reverse proxy с Let's Encrypt либо HTTPS на IP с сертификатом:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -nodes \
+  -keyout dashboard-key.pem -out dashboard-cert.pem -days 365 \
+  -subj "/CN=84.201.132.67" \
+  -addext "subjectAltName=IP:84.201.132.67"
+
+# .env
+DASHBOARD_PORT=8443
+DASHBOARD_BASE_URL=https://84.201.132.67:8443
+DASHBOARD_SSL_CERT=dashboard-cert.pem
+DASHBOARD_SSL_KEY=dashboard-key.pem
+```
+
+С самоподписанным сертификатом браузер покажет предупреждение — это ожидаемо,
+но для постоянной работы лучше домен и нормальный сертификат. **Не включайте
+`DASHBOARD_DEV_MODE` на публичном IP**: любой сможет войти без Discord.
+
 ### Что настраивается
 
 - **Автороли** — роли людям и ботам, включение/выключение, удаление.
