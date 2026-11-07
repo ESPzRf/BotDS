@@ -553,7 +553,7 @@ SELECT id, prize, ends_at FROM giveaways WHERE ended = 0;
 ├── scripts/
 │   ├── check_commands.py  # загрузка всех когов и проверка дерева команд
 │   └── migrate_sqlite_to_postgres.py
-├── tests/                 # 91 тестов
+├── tests/                 # 92 тестов
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.postgres.yml
@@ -578,7 +578,7 @@ python -m unittest discover -s tests -v
 python scripts/check_commands.py
 ```
 
-91 тестов: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
+92 тестов: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
 модулей, диалект PostgreSQL, скользящее окно, выбор победителей.
 Отдельный тест загружает все коги и проверяет дерево команд.
 Живой Discord API не тестируется — нужен токен и сервер.

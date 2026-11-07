@@ -108,6 +108,7 @@ class Access(commands.Cog):
         rule = await self._get_rule(guild.id, command)
         mutate(rule)
         await self._save(rule)
+        self.bot.invalidate_access(guild.id)
         await interaction.response.send_message(embed=self._summary(rule), ephemeral=True)
 
     # --------------------------------------------------------------- commands
@@ -250,6 +251,7 @@ class Access(commands.Cog):
             raise UserError("Команда доступна только на сервере.")
         name = self._validate(command)
         deleted = await self.bot.repos.access.delete(guild.id, name)
+        self.bot.invalidate_access(guild.id)
         await interaction.response.send_message(
             embed=success_embed(
                 f"Ограничения для `/{name}` {'сняты' if deleted else 'не были заданы'}."

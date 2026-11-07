@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 try:
@@ -23,6 +24,7 @@ from core.database import Database
 from core.embeds import error_embed
 from core.errors import UserError
 from core.i18n import I18n
+from core.instance_lock import AlreadyRunningError, InstanceLock
 from core.logging_setup import setup_logging
 from core.repositories import Repositories, build_repositories
 from core.settings import GuildSettingsStore
@@ -92,6 +94,23 @@ class ModerationBot(commands.Bot):
         self.repos: Repositories = build_repositories(self.db)
         self.i18n = I18n(PROJECT_ROOT / "locales")
         self.warning_service = WarningService(self)
+        self._access_cache: dict[int, tuple[float, dict]] = {}
+
+    # ---------------------------------------------------------------- access
+
+    def invalidate_access(self, guild_id: int | None = None) -> None:
+        if guild_id is None:
+            self._access_cache.clear()
+        else:
+            self._access_cache.pop(guild_id, None)
+
+    async def access_rules(self, guild_id: int, *, force: bool = False) -> dict:
+        cached = self._access_cache.get(guild_id)
+        if not force and cached is not None and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        rules = await self.repos.access.rules(guild_id)
+        self._access_cache[guild_id] = (time.monotonic(), rules)
+        return rules
 
     # ------------------------------------------------------------------ setup
 
@@ -138,6 +157,14 @@ class ModerationBot(commands.Bot):
             status=discord.Status.online,
         )
 
+        # Прогреваем кэш ограничений, чтобы interaction_check не ходил в БД
+        # на каждую команду и не рисковал 3-секундным дедлайном Discord.
+        if self.guilds:
+            await asyncio.gather(
+                *(self.access_rules(guild.id, force=True) for guild in self.guilds),
+                return_exceptions=True,
+            )
+
         invite = discord.utils.oauth_url(
             self.user.id,
             permissions=PERMISSIONS,
@@ -163,7 +190,14 @@ class ModerationBot(commands.Bot):
             command_path = interaction.command.qualified_name
 
         try:
-            rules = await self.repos.access.rules(interaction.guild.id)
+            rules = await asyncio.wait_for(self.access_rules(interaction.guild.id), timeout=2.0)
+        except asyncio.TimeoutError:
+            log.warning("Проверка доступа к команде заняла больше 2 секунд")
+            await interaction.response.send_message(
+                embed=error_embed("Проверка доступа заняла слишком много времени. Попробуйте ещё раз."),
+                ephemeral=True,
+            )
+            return False
         except Exception:  # noqa: BLE001
             log.exception("Не удалось проверить доступ к команде")
             await interaction.response.send_message(
@@ -248,23 +282,38 @@ def main() -> int:
     else:
         log.info("База данных: SQLite (%s)", config.db_path)
 
-    bot = ModerationBot(config)
+    lock_path = (
+        PROJECT_ROOT / "data" / "bot.lock"
+        if config.database_url
+        else config.db_path.parent / "bot.lock"
+    )
+    lock = InstanceLock(lock_path)
     try:
-        asyncio.run(bot.run_bot())
-    except discord.LoginFailure:
-        log.critical("Неверный токен бота. Проверьте DISCORD_TOKEN в .env")
+        lock.acquire()
+    except AlreadyRunningError as exc:
+        log.critical("%s", exc)
         return 1
-    except discord.PrivilegedIntentsRequired as exc:
-        log.critical(
-            "Не включены привилегированные интенты (%s).\n"
-            "Включите SERVER MEMBERS INTENT и MESSAGE CONTENT INTENT "
-            "в Discord Developer Portal → Bot.",
-            exc,
-        )
-        return 1
-    except KeyboardInterrupt:
-        log.info("Бот остановлен")
-    return 0
+
+    try:
+        bot = ModerationBot(config)
+        try:
+            asyncio.run(bot.run_bot())
+        except discord.LoginFailure:
+            log.critical("Неверный токен бота. Проверьте DISCORD_TOKEN в .env")
+            return 1
+        except discord.PrivilegedIntentsRequired as exc:
+            log.critical(
+                "Не включены привилегированные интенты (%s).\n"
+                "Включите SERVER MEMBERS INTENT и MESSAGE CONTENT INTENT "
+                "в Discord Developer Portal → Bot.",
+                exc,
+            )
+            return 1
+        except KeyboardInterrupt:
+            log.info("Бот остановлен")
+        return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":
