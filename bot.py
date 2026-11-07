@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timezone
 
@@ -293,6 +294,7 @@ def main() -> int:
     except AlreadyRunningError as exc:
         log.critical("%s", exc)
         return 1
+    log.info("PID %s, lock-файл: %s", os.getpid(), lock_path)
 
     try:
         bot = ModerationBot(config)

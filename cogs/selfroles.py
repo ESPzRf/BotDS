@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 import discord
@@ -449,7 +450,19 @@ class SelfRoles(commands.Cog):
         if guild is None:
             raise UserError("Команда доступна только на сервере.")
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        started = time.monotonic()
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        except discord.NotFound:
+            age = (discord.utils.utcnow() - interaction.created_at).total_seconds()
+            log.critical(
+                "Не удалось подтвердить /selfrole create: interaction age=%.2f c, "
+                "HTTP defer=%.2f c. Обычно это означает второй запущенный экземпляр "
+                "бота с тем же токеном или задержку сети до Discord.",
+                age,
+                time.monotonic() - started,
+            )
+            return
 
         permissions = channel.permissions_for(guild.me)
         if not permissions.send_messages or not permissions.embed_links:
