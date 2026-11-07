@@ -1,0 +1,146 @@
+{
+  "web": {
+    "brand": "ModBot",
+    "title": "Dashboard",
+    "login": "Sign in with Discord",
+    "logout": "Sign out",
+    "language": "Language",
+    "footer": "Discord bot dashboard",
+    "back": "Back",
+    "save": "Save",
+    "saved": "Settings saved.",
+    "error": "Error",
+    "not_found": "Page not found",
+    "forbidden": "Access denied",
+    "csrf": "Your session has expired. Refresh the page and try again.",
+    "invalid_request": "Invalid request.",
+    "nav": {
+      "overview": "Overview",
+      "settings": "Settings",
+      "warnings": "Warnings",
+      "tickets": "Tickets",
+      "levels": "Levels",
+      "giveaways": "Giveaways"
+    },
+    "landing": {
+      "title": "Manage your bot from the browser",
+      "subtitle": "Logs, warnings, tickets, levels and giveaways in one place.",
+      "feature_logs": "Log and moderation channels",
+      "feature_moderation": "Warnings and revoking punishments",
+      "feature_tickets": "Open tickets and server stats",
+      "feature_security": "Anti-raid, anti-spam and captcha",
+      "hint": "Only server owners and members with the Manage Server permission can sign in."
+    },
+    "guilds": {
+      "title": "Your servers",
+      "empty": "You have no servers where you can manage the bot.",
+      "open": "Open",
+      "bot_missing": "The bot is not on this server"
+    },
+    "overview": {
+      "title": "Server overview",
+      "members": "Members",
+      "warnings": "Active warnings",
+      "tickets": "Open tickets",
+      "giveaways": "Active giveaways",
+      "appeals": "Appeals",
+      "shop": "Shop items",
+      "recent_warnings": "Recent warnings",
+      "top_levels": "Top levels",
+      "no_warnings": "No active warnings.",
+      "no_levels": "No level data yet.",
+      "manage": "Configure"
+    },
+    "settings": {
+      "title": "Server settings",
+      "general": "General",
+      "locale": "Dashboard and bot language",
+      "locale_hint": "Affects bot replies and the default language of this dashboard.",
+      "logs": "Logs",
+      "log_channel": "General log channel",
+      "modlog_channel": "Moderation log channel",
+      "ticket_log_channel": "Ticket log channel",
+      "appeals_channel": "Appeals channel",
+      "automod": "Auto moderation",
+      "automod_enabled": "Enable the word filter",
+      "automod_action": "Action on violation",
+      "automod_timeout": "Timeout, seconds",
+      "levels": "Levels",
+      "levels_enabled": "Enable levels",
+      "xp_min": "Minimum XP per message",
+      "xp_max": "Maximum XP per message",
+      "levels_cooldown": "Cooldown, seconds",
+      "warnings": "Warnings",
+      "warnings_dm": "Send warnings via DM",
+      "security": "Security",
+      "antiraid_enabled": "Anti-raid",
+      "antispam_enabled": "Anti-spam",
+      "captcha_enabled": "Captcha on join",
+      "stats": "Statistics",
+      "stats_enabled": "Update voice channels",
+      "channel_none": "— not set —",
+      "save_hint": "Changes reach the bot within a few seconds.",
+      "seconds": "seconds"
+    },
+    "warnings": {
+      "title": "Warnings",
+      "id": "ID",
+      "user": "Member",
+      "moderator": "Moderator",
+      "reason": "Reason",
+      "date": "Date",
+      "revoke": "Revoke",
+      "empty": "No active warnings.",
+      "confirm_revoke": "Revoke this warning?"
+    },
+    "tickets": {
+      "title": "Open tickets",
+      "channel": "Channel",
+      "author": "Author",
+      "claimed": "Claimed by",
+      "created": "Created",
+      "empty": "No open tickets.",
+      "open": "Open"
+    },
+    "levels": {
+      "title": "Levels and loyalty",
+      "place": "Place",
+      "user": "Member",
+      "level": "Level",
+      "xp": "XP",
+      "loyalty": "Loyalty",
+      "messages": "Messages",
+      "empty": "No statistics yet."
+    },
+    "giveaways": {
+      "title": "Active giveaways",
+      "prize": "Prize",
+      "entries": "Entries",
+      "ends": "Ends",
+      "winners": "Winners",
+      "empty": "No active giveaways."
+    },
+    "actions": {
+      "delete": "Delete message",
+      "warn": "Delete + warning",
+      "timeout": "Delete + timeout"
+    },
+    "errors": {
+      "oauth": "Discord sign-in failed. Please try again.",
+      "api": "The Discord API is temporarily unavailable.",
+      "no_bot": "The bot is not on this server.",
+      "unknown": "Internal dashboard error.",
+      "state": "Sign-in verification failed. Please try again."
+    }
+  },
+  "bot": {
+    "language": {
+      "saved": "Server language: **{language}**.",
+      "invalid": "This language is not supported.",
+      "current": "Current language: **{language}**."
+    },
+    "common": {
+      "no_access": "You do not have permission."
+    }
+  }
+}
