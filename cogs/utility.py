@@ -119,7 +119,8 @@ class Utility(commands.Cog):
         except Exception:  # noqa: BLE001
             db_text = "недоступна"
 
-        gateway_ms = round(self.bot.latency * 1000)
+        latency = self.bot.latency
+        gateway_ms = round(latency * 1000) if latency == latency else 0
         embed = base_embed(
             title="🏓 Понг",
             description=f"Gateway: **{gateway_ms} мс**\nБаза данных: **{db_text}**",

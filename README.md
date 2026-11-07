@@ -551,8 +551,9 @@ SELECT id, prize, ends_at FROM giveaways WHERE ended = 0;
 │   ├── logging_setup.py
 │   └── utils.py
 ├── scripts/
+│   ├── check_commands.py  # загрузка всех когов и проверка дерева команд
 │   └── migrate_sqlite_to_postgres.py
-├── tests/                 # 88 тестов без Discord
+├── tests/                 # 90 тестов
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.postgres.yml
@@ -574,10 +575,12 @@ SQLite-файл по умолчанию — `data/bot.db` (WAL). Резервн�
 
 ```bash
 python -m unittest discover -s tests -v
+python scripts/check_commands.py
 ```
 
-88 тестов: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
+90 тестов: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
 модулей, диалект PostgreSQL, скользящее окно, выбор победителей.
+Отдельный тест загружает все коги и проверяет дерево команд.
 Живой Discord API не тестируется — нужен токен и сервер.
 
 ## Docker (SQLite)
