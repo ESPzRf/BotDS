@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from core.command_access import LEGACY_COMMANDS, CommandRule, normalize_command
+from core.command_access import LEGACY_COMMANDS, LEGACY_GROUPS, CommandRule, normalize_command
 from core.database import Database
 
 # ---------------------------------------------------------------------------
@@ -1398,7 +1398,7 @@ class CommandAccessRepo:
         return await self.db.execute("DELETE FROM command_access WHERE guild_id = ?", (guild_id,))
 
     async def migrate_legacy(self) -> None:
-        """Переносит правила старых одиночных команд на новые пути групп."""
+        """Переносит правила временной версии с группами на прежние имена команд."""
 
         for old, new in LEGACY_COMMANDS.items():
             rows = await self.db.fetchall(
@@ -1414,6 +1414,30 @@ class CommandAccessRepo:
                         "UPDATE command_access SET command = ? WHERE guild_id = ? AND command = ?",
                         (new, guild_id, old),
                     )
+
+        for group, targets in LEGACY_GROUPS.items():
+            rows = await self.db.fetchall(
+                "SELECT guild_id FROM command_access WHERE command = ?",
+                (group,),
+            )
+            for row in rows:
+                guild_id = int(row["guild_id"])
+                rule = await self.get(guild_id, group)
+                if rule is not None:
+                    for target in targets:
+                        if await self.get(guild_id, target) is None:
+                            await self.save(
+                                CommandRule(
+                                    guild_id=guild_id,
+                                    command=target,
+                                    allow_roles=set(rule.allow_roles),
+                                    allow_users=set(rule.allow_users),
+                                    deny_roles=set(rule.deny_roles),
+                                    deny_users=set(rule.deny_users),
+                                    enabled=rule.enabled,
+                                )
+                            )
+                await self.delete(guild_id, group)
 
 
 def _command_rule_from_row(row: Any | None) -> CommandRule | None:

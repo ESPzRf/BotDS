@@ -494,19 +494,27 @@ class CommandAccessTests(DatabaseTestCase):
         self.assertEqual(await self.repos.access.rules(1), {})
 
     async def test_legacy_command_migration(self) -> None:
-        await self.repos.access.save(CommandRule(1, "warn", allow_roles={10}))
+        await self.repos.access.save(CommandRule(1, "mod warn", allow_roles={10}))
         await self.repos.access.migrate_legacy()
         rules = await self.repos.access.rules(1)
-        self.assertEqual(set(rules), {"mod warn"})
-        self.assertEqual(rules["mod warn"].allow_roles, {10})
+        self.assertEqual(set(rules), {"warn"})
+        self.assertEqual(rules["warn"].allow_roles, {10})
 
-    async def test_legacy_migration_keeps_new_rule(self) -> None:
-        await self.repos.access.save(CommandRule(1, "warn", allow_roles={10}))
+    async def test_legacy_migration_keeps_existing_old_rule(self) -> None:
         await self.repos.access.save(CommandRule(1, "mod warn", allow_roles={20}))
+        await self.repos.access.save(CommandRule(1, "warn", allow_roles={10}))
         await self.repos.access.migrate_legacy()
         rules = await self.repos.access.rules(1)
-        self.assertEqual(set(rules), {"mod warn"})
-        self.assertEqual(rules["mod warn"].allow_roles, {20})
+        self.assertEqual(set(rules), {"warn"})
+        self.assertEqual(rules["warn"].allow_roles, {10})
+
+    async def test_legacy_group_migration(self) -> None:
+        await self.repos.access.save(CommandRule(1, "levels", allow_roles={10}))
+        await self.repos.access.migrate_legacy()
+        rules = await self.repos.access.rules(1)
+        self.assertEqual(set(rules), {"rank", "leaderboard", "daily"})
+        for rule in rules.values():
+            self.assertEqual(rule.allow_roles, {10})
 
 
 if __name__ == "__main__":

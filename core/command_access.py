@@ -117,19 +117,77 @@ REASON_MESSAGES = {
     "not_allowed": "Команда доступна только определённым ролям или пользователям.",
 }
 
-# Старые одиночные команды -> новые пути после перехода на группы.
+# Пути, которые временно существовали после группировки, -> старые имена.
+# Нужно, чтобы правила, созданные в той версии, продолжили работать.
 LEGACY_COMMANDS = {
-    "warn": "mod warn",
-    "warnings": "mod warnings",
-    "unwarn": "mod unwarn",
-    "clearwarnings": "mod clearwarnings",
-    "rank": "levels rank",
-    "leaderboard": "levels leaderboard",
-    "daily": "levels daily",
-    "buy": "shop buy",
-    "balance": "shop balance",
-    "appeal": "appeals submit",
-    "help": "utility help",
-    "ping": "utility ping",
-    "botinfo": "utility botinfo",
+    "mod warn": "warn",
+    "mod warnings": "warnings",
+    "mod unwarn": "unwarn",
+    "mod clearwarnings": "clearwarnings",
+    "levels rank": "rank",
+    "levels leaderboard": "leaderboard",
+    "levels daily": "daily",
+    "shop buy": "buy",
+    "shop balance": "balance",
+    "appeals submit": "appeal",
+    "utility help": "help",
+    "utility ping": "ping",
+    "utility botinfo": "botinfo",
+}
+
+# Группы, которые существовали только в версии с группировкой.
+LEGACY_GROUPS = {
+    "mod": ("warn", "warnings", "unwarn", "clearwarnings"),
+    "levels": ("rank", "leaderboard", "daily"),
+    "utility": ("help", "ping", "botinfo"),
+}
+
+# Готовые списки команд для быстрой выдачи доступа одной ролью.
+COMMAND_PRESETS: dict[str, tuple[str, ...]] = {
+    "player": (
+        "rank",
+        "leaderboard",
+        "daily",
+        "shop list",
+        "buy",
+        "balance",
+        "appeal",
+        "help",
+        "ping",
+        "botinfo",
+    ),
+    "moderator": (
+        "warn",
+        "warnings",
+        "unwarn",
+        "clearwarnings",
+        "tempactions ban",
+        "tempactions mute",
+        "tempactions list",
+        "tempactions cancel",
+        "ticket close",
+        "ticket add",
+        "ticket remove",
+        "appeals list",
+    ),
+    "admin": (
+        "logs",
+        "autorole",
+        "selfrole",
+        "automod",
+        "warnconfig",
+        "levelconfig",
+        "ticket setup",
+        "ticket delete",
+        "ticket log",
+        "ticket panels",
+        "antiraid",
+        "antispam",
+        "captcha",
+        "stats",
+        "giveaway",
+        "shop add",
+        "shop remove",
+        "settings",
+    ),
 }

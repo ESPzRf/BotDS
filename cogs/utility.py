@@ -34,9 +34,6 @@ ROOT_SECTION = {
     "ticket": 1,
     "appeal": 1,
     "appeals": 1,
-    "mod": 0,
-    "levels": 4,
-    "utility": 7,
     "antiraid": 2,
     "antispam": 2,
     "captcha": 2,
@@ -156,7 +153,7 @@ class HelpView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                "Это меню открыл другой пользователь. Запустите `/utility help` сами.",
+                "Это меню открыл другой пользователь. Запустите `/help` сами.",
                 ephemeral=True,
             )
             return False
@@ -176,18 +173,16 @@ class HelpView(discord.ui.View):
 
 
 class Utility(commands.Cog):
-    utility = app_commands.Group(name="utility", description="Справка и информация о боте")
-
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @utility.command(name="help", description="Список команд бота")
+    @app_commands.command(name="help", description="Список команд бота")
     async def help_command(self, interaction: discord.Interaction) -> None:
         pages = build_help_pages(self.bot)
         view = HelpView(interaction.user.id, pages) if len(pages) > 1 else None
         await interaction.response.send_message(embed=pages[0], view=view, ephemeral=True)
 
-    @utility.command(name="ping", description="Проверить задержку бота и базы данных")
+    @app_commands.command(name="ping", description="Проверить задержку бота и базы данных")
     async def ping(self, interaction: discord.Interaction) -> None:
         started = time.perf_counter()
         try:
@@ -206,7 +201,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @utility.command(name="botinfo", description="Информация о боте")
+    @app_commands.command(name="botinfo", description="Информация о боте")
     async def botinfo(self, interaction: discord.Interaction) -> None:
         assert self.bot.user is not None
         uptime = (datetime.now(timezone.utc) - self.bot.started_at).total_seconds()

@@ -16,7 +16,7 @@
 | 🎛️ **Роли по кнопкам** | Embed-панели и мастер выбора ролей, до 25 кнопок, toggle-логика, эксклюзивные группы, сохранение после рестарта. |
 | 🚫 **Пул запрещённых слов** | Нормализация (регистр, homoglyphs, zero-width, leet), границы слов, `*`, исключения, действия delete/warn/timeout. |
 | ⚠️ **Предупреждения** | История в БД, снятие, эскалация N → timeout/kick/ban, DM и лог. |
-| 📈 **Уровни и лояльность** | XP, уровни, роли-награды, `/levels rank`, `/levels leaderboard`, `/levels daily`, статусы, ручная выдача XP/лояльности и множители (события, роли, бустеры). |
+| 📈 **Уровни и лояльность** | XP, уровни, роли-награды, `/rank`, `/leaderboard`, `/daily`, статусы, ручная выдача XP/лояльности и множители (события, роли, бустеры). |
 | 🎫 **Тикеты** | Панель с кнопкой, приватные каналы, взятие в работу, закрытие с транскриптом. |
 | ⏰ **Временные наказания** | `/tempactions ban` и `mute` с автоснятием, список и досрочная отмена. |
 | 🚨 **Антирейд** | Всплеск входов, режим рейда, проверка возраста аккаунта, kick/ban/timeout. |
@@ -115,20 +115,30 @@ python bot.py
 
 ## Команды
 
-Все команды собраны в **20 групп**:
+Команды остались с прежними именами: `/warn`, `/warnings`, `/rank`, `/buy`, `/appeal`,
+`/help` и остальные. Для ограничений не нужно выдавать доступ по одной команде — есть
+готовые списки.
 
-`logs`, `autorole`, `selfrole`, `automod`, `mod`, `warnconfig`, `levels`, `levelconfig`,
-`ticket`, `tempactions`, `antiraid`, `antispam`, `captcha`, `appeals`, `stats`,
-`giveaway`, `shop`, `access`, `settings`, `utility`.
+### Списки команд
 
-Группы удобны для ограничений: достаточно выдать доступ к группе, и он применится ко всем
-её подкомандам. Старые одиночные команды переехали:
+| Список | Для кого | Что входит |
+|---|---|---|
+| `player` | игроки | `/rank`, `/leaderboard`, `/daily`, `/buy`, `/balance`, `/shop list`, `/appeal`, `/help`, `/ping`, `/botinfo` |
+| `moderator` | модераторы | предупреждения, временные наказания, закрытие тикетов, жалобы |
+| `admin` | администрация | логи, автороли, selfrole, автомодерация, конфиги уровней/предупреждений, статистика, розыгрыши, магазин, настройки |
 
-- `/warn` → `/mod warn`;
-- `/rank` → `/levels rank`;
-- `/buy` → `/shop buy`;
-- `/appeal` → `/appeals submit`;
-- `/help` → `/utility help`.
+Список используется вместо имени команды:
+
+```
+/access allow-role command:moderator role:@Модератор
+/access remove-role command:moderator role:@Модератор
+/access presets
+/access list command:moderator
+```
+
+Можно ограничивать и отдельную команду: `/access allow-role command:warn role:@Модератор`.
+Правила списка применяются ко всем его командам сразу, но не отменяют базовые права
+Discord: например, для команд модерации у роли должно быть право `Moderate Members`.
 
 ### Логи
 
@@ -188,10 +198,10 @@ python bot.py
 
 | Команда | Описание |
 |---|---|
-| `/mod warn member reason` | Выдать |
-| `/mod warnings member` | Активные и пороги |
-| `/mod unwarn warning_id [reason]` | Снять |
-| `/mod clearwarnings member` | Снять все |
+| `/warn member reason` | Выдать |
+| `/warnings member` | Активные и пороги |
+| `/unwarn warning_id [reason]` | Снять |
+| `/clearwarnings member` | Снять все |
 | `/warnconfig show` | Настройки |
 | `/warnconfig escalation count action [duration]` | Добавить порог |
 | `/warnconfig escalation-remove count` | Удалить порог |
@@ -227,7 +237,7 @@ python bot.py
 
 | Команда / кнопка | Описание |
 |---|---|
-| `/appeals submit warning_id reason` | Подать апелляцию |
+| `/appeal warning_id reason` | Подать апелляцию |
 | `/appeals list` | Ожидающие |
 | `/appeals channel [#канал]` | Канал апелляций |
 | Кнопки «Одобрить» / «Отклонить» | Решение поддержки |
@@ -292,16 +302,16 @@ python bot.py
 | `/shop list` | Товары |
 | `/shop add role name price [description] [stock]` | Добавить товар |
 | `/shop remove item_id` | Удалить товар |
-| `/shop buy item_id` | Купить |
-| `/shop balance` | Баланс |
+| `/buy item_id` | Купить |
+| `/balance` | Баланс |
 
 ### Уровни
 
 | Команда | Описание |
 |---|---|
-| `/levels rank [member]` | Профиль |
-| `/levels leaderboard [metric]` | Топ-10 |
-| `/levels daily` | Ежедневная награда |
+| `/rank [member]` | Профиль |
+| `/leaderboard [metric]` | Топ-10 |
+| `/daily` | Ежедневная награда |
 | `/levelconfig status` | Настройки |
 | `/levelconfig xp min max` | Опыт за сообщение |
 | `/levelconfig cooldown seconds` | Кулдаун |
@@ -336,17 +346,18 @@ python bot.py
 | `/access deny-user` / `undeny-user` | Запретить/разрешить пользователя |
 | `/access disable` / `enable` | Полностью выключить/включить команду |
 | `/access reset command` | Снять все ограничения |
+| `/access presets` | Показать готовые списки команд |
 | `/access list [command]` | Показать правила |
 
-`command` — точное имя: `mod`, `mod warn`, `levelconfig add-xp`. Теперь все команды
-собраны в группы, поэтому можно ограничить сразу группу: `/access allow-role command:mod role:@Moderator`.
-Ограничение родительской группы действует на все подкоманды; ограничения родителя и
-подкоманды складываются. В параметре command работают подсказки групп и команд.
-Администраторы и владелец сервера всегда имеют доступ.
+`command` — имя команды, группы настроек или готового списка: `warn`, `levelconfig`,
+`player`, `moderator`, `admin`. Список применяется сразу ко всем своим командам, поэтому
+не нужно выдавать доступ по одной команде. Ограничение группы (`levelconfig`) действует
+на все её подкоманды; ограничения родителя и подкоманды складываются. В параметре `command`
+работают подсказки команд и списков. Администраторы и владелец сервера всегда имеют доступ.
 
 ### Прочее
 
-`/settings view`, `/settings reset`, `/settings language`, `/utility help`, `/utility ping`, `/utility botinfo`.
+`/settings view`, `/settings reset`, `/settings language`, `/help`, `/ping`, `/botinfo`.
 
 ## Как это работает
 
@@ -384,14 +395,14 @@ kick/ban/timeout. Антиспам считает сообщения польз�
 
 ### Апелляции
 
-`/appeals submit` проверяет, что предупреждение принадлежит автору и ещё активно, и
+`/appeal` проверяет, что предупреждение принадлежит автору и ещё активно, и
 отправляет embed с кнопками в канал апелляций. Одобрение снимает предупреждение,
 отклонение — нет; участник получает DM.
 
 ### Уровни
 
 XP за сообщение 15–25, кулдаун 60 секунд; переход `L → L+1` стоит `100 + 50·L` XP,
-всего до уровня `L` — `25·L² + 75·L`. `/levels daily`: `10 + 2·(стрик−1)`, максимум 50.
+всего до уровня `L` — `25·L² + 75·L`. `/daily`: `10 + 2·(стрик−1)`, максимум 50.
 Статусы: Бронза 0, Серебро 100, Золото 500, Платина 1500, Алмаз 5000.
 
 #### Накрутка и множители
@@ -570,7 +581,7 @@ SELECT id, prize, ends_at FROM giveaways WHERE ended = 0;
 ├── scripts/
 │   ├── check_commands.py  # загрузка всех когов и проверка дерева команд
 │   └── migrate_sqlite_to_postgres.py
-├── tests/                 # 94 теста
+├── tests/                 # 96 тестов
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.postgres.yml
@@ -595,7 +606,7 @@ python -m unittest discover -s tests -v
 python scripts/check_commands.py
 ```
 
-94 теста: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
+96 тестов: формулы уровней, множители XP, фильтр слов, парсинг времени, репозитории всех новых
 модулей, диалект PostgreSQL, скользящее окно, выбор победителей.
 Отдельный тест загружает все коги и проверяет дерево команд.
 Живой Discord API не тестируется — нужен токен и сервер.

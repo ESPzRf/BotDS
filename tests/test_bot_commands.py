@@ -48,8 +48,6 @@ class CommandTreeTests(unittest.IsolatedAsyncioTestCase):
         top_level = self.bot.tree.get_commands()
         self.assertLessEqual(len(top_level), 100)
         self.assertEqual(len({command.name for command in top_level}), len(top_level))
-        for command in top_level:
-            self.assertIsInstance(command, app_commands.Group, f"/{command.name} вне группы")
 
         for item in self.bot.tree.walk_commands():
             if isinstance(item, app_commands.Group):
@@ -79,6 +77,18 @@ class CommandTreeTests(unittest.IsolatedAsyncioTestCase):
         for item in self.bot.tree.walk_commands():
             if isinstance(item, app_commands.Command):
                 self.assertIsNotNone(item.binding, f"{item.qualified_name}: нет cog")
+
+    async def test_presets_reference_existing_commands(self) -> None:
+        from core.command_access import COMMAND_PRESETS
+
+        available = {
+            item.qualified_name
+            for item in self.bot.tree.walk_commands()
+        }
+        for name, commands in COMMAND_PRESETS.items():
+            self.assertEqual(len(commands), len(set(commands)), f"{name}: дубликаты")
+            for command in commands:
+                self.assertIn(command, available, f"{name}: нет команды {command}")
 
     async def test_help_pages_fit_discord_limits(self) -> None:
         from cogs.utility import build_help_pages
