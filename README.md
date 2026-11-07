@@ -49,8 +49,14 @@ start.bat
 
 ```bash
 chmod +x start.sh
-./start.sh
+./start.sh              # только бот
+./start.sh dashboard    # только веб-панель
+./start.sh all          # бот и панель вместе
 ```
+
+Скрипт сам создаёт `.venv`, ставит нужные зависимости (`requirements.txt` и/или
+`requirements-dashboard.txt`), проверяет `.env` и предупреждает, если панель
+слушает только `127.0.0.1`.
 
 Вручную:
 
