@@ -33,7 +33,7 @@ from core.warning_service import WarningService
 
 log = logging.getLogger(__name__)
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 EXTENSIONS: tuple[str, ...] = (
     "cogs.logs",
@@ -107,7 +107,7 @@ class ModerationBot(commands.Bot):
 
     async def access_rules(self, guild_id: int, *, force: bool = False) -> dict:
         cached = self._access_cache.get(guild_id)
-        if not force and cached is not None and time.monotonic() - cached[0] < 30:
+        if not force and cached is not None and time.monotonic() - cached[0] < 15:
             return cached[1]
         rules = await self.repos.access.rules(guild_id)
         self._access_cache[guild_id] = (time.monotonic(), rules)

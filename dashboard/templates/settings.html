@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — настройки{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Настройки бота</h1>
+    <p class="muted">Изменения сохраняются в общую базу и применяются ботом в течение ~15 секунд.</p>
+  </div>
+</div>
+
+<div class="tabs">
+  {% for item in sections %}
+    <a class="{{ 'active' if item.slug == section.slug else '' }}"
+       href="/g/{{ guild.id }}/settings?section={{ item.slug }}">{{ item.title }}</a>
+  {% endfor %}
+</div>
+
+{% if saved %}
+  <div class="flash success">Сохранено.</div>
+{% endif %}
+{% if errors %}
+  <div class="flash error">
+    {% for item in errors %}<div>{{ item }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+<section class="panel">
+  <h2>{{ section.title }}</h2>
+  <p class="muted">{{ section.description }}</p>
+
+  <form method="post" action="/g/{{ guild.id }}/settings/{{ section.slug }}" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    {% for field in section.fields %}
+      {% set value = values.get(field.key) %}
+      <div class="field">
+        <label for="f-{{ field.key }}">{{ field.label }}</label>
+        {% if field.help %}<div class="help">{{ field.help }}</div>{% endif %}
+
+        {% if field.kind == 'bool' %}
+          <label class="switch">
+            <input id="f-{{ field.key }}" type="checkbox" name="{{ field.key }}" {% if value %}checked{% endif %}>
+            <span>Включено</span>
+          </label>
+
+        {% elif field.kind == 'int' or field.kind == 'float' %}
+          <input id="f-{{ field.key }}" type="number"
+                 step="{{ '1' if field.kind == 'int' else '0.1' }}"
+                 name="{{ field.key }}" value="{{ value if value is not none else '' }}"
+                 {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
+                 {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
+
+        {% elif field.kind == 'channel' %}
+          <select id="f-{{ field.key }}" name="{{ field.key }}">
+            <option value="">— не выбрано —</option>
+            {% for channel in channels %}
+              <option value="{{ channel.id }}" {% if value|string == channel.id|string %}selected{% endif %}>
+                {{ channel|channel_label }}
+              </option>
+            {% endfor %}
+          </select>
+
+        {% elif field.kind == 'role' %}
+          <select id="f-{{ field.key }}" name="{{ field.key }}">
+            <option value="">— не выбрано —</option>
+            {% for role in roles %}
+              <option value="{{ role.id }}" {% if value|string == role.id|string %}selected{% endif %}>
+                @{{ role.name }}
+              </option>
+            {% endfor %}
+          </select>
+
+        {% elif field.kind == 'channels' %}
+          <select id="f-{{ field.key }}" name="{{ field.key }}" multiple size="6">
+            {% for channel in channels %}
+              <option value="{{ channel.id }}" {% if channel.id|int in value|default([]) %}selected{% endif %}>
+                {{ channel|channel_label }}
+              </option>
+            {% endfor %}
+          </select>
+
+        {% elif field.kind == 'roles' %}
+          <select id="f-{{ field.key }}" name="{{ field.key }}" multiple size="6">
+            {% for role in roles %}
+              <option value="{{ role.id }}" {% if role.id|int in value|default([]) %}selected{% endif %}>
+                @{{ role.name }}
+              </option>
+            {% endfor %}
+          </select>
+
+        {% elif field.kind == 'select' %}
+          <select id="f-{{ field.key }}" name="{{ field.key }}">
+            {% for option_value, option_label in field.options %}
+              <option value="{{ option_value }}" {% if value|string == option_value %}selected{% endif %}>{{ option_label }}</option>
+            {% endfor %}
+          </select>
+
+        {% elif field.kind == 'json' %}
+          <textarea id="f-{{ field.key }}" name="{{ field.key }}" rows="7" spellcheck="false">{{ value|tojson(indent=2) }}</textarea>
+
+        {% elif field.kind == 'textarea' %}
+          <textarea id="f-{{ field.key }}" name="{{ field.key }}" rows="4">{{ value or '' }}</textarea>
+
+        {% else %}
+          <input id="f-{{ field.key }}" type="text" name="{{ field.key }}" value="{{ value or '' }}"
+                 placeholder="{{ field.placeholder }}">
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Сохранить раздел</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

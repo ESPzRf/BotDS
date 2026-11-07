@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Мои серверы{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Мои серверы</h1>
+    <p class="muted">Серверы, где у вас есть право «Управлять сервером» и куда добавлен бот.</p>
+  </div>
+</div>
+
+{% if guilds %}
+  <div class="card-grid">
+    {% for item in guilds %}
+      <a class="guild-card" href="/g/{{ item.id }}">
+        <div class="guild-avatar">
+          {% if item.icon %}
+            <img src="https://cdn.discordapp.com/icons/{{ item.id }}/{{ item.icon }}.png?size=96" alt="">
+          {% else %}
+            {{ item.name[:1] }}
+          {% endif %}
+        </div>
+        <div>
+          <strong>{{ item.name }}</strong>
+          <div class="muted">ID: {{ item.id }}</div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <p>Нет доступных серверов.</p>
+    <p class="muted">Проверьте, что бот добавлен на сервер, а у вас есть право «Управлять сервером».</p>
+  </div>
+{% endif %}
+{% endblock %}

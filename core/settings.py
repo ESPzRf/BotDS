@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from core.database import Database
+
+# Бот и веб-панель — разные процессы. Небольшой TTL позволяет панели
+# менять настройки без перезапуска бота, но не дёргать БД на каждое сообщение.
+CACHE_TTL = 15.0
 
 
 # Централизованные значения по умолчанию. Всё, что не задано на сервере,
@@ -104,14 +109,15 @@ class GuildSettingsStore:
 
     def __init__(self, db: Database) -> None:
         self.db = db
-        self._cache: dict[tuple[int, str], Any] = {}
+        self._cache: dict[tuple[int, str], tuple[float, Any]] = {}
 
     # ------------------------------------------------------------------ read
 
     async def get(self, guild_id: int, key: str, default: Any = None) -> Any:
         cache_key = (guild_id, key)
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache.get(cache_key)
+        if cached is not None and time.monotonic() - cached[0] < CACHE_TTL:
+            return cached[1]
 
         row = await self.db.fetchone(
             "SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
@@ -127,7 +133,7 @@ class GuildSettingsStore:
         else:
             value = default
 
-        self._cache[cache_key] = value
+        self._cache[cache_key] = (time.monotonic(), value)
         return value
 
     async def get_int(self, guild_id: int, key: str, default: int = 0) -> int:
@@ -157,7 +163,7 @@ class GuildSettingsStore:
             except (TypeError, ValueError):
                 value = row["value"]
             result[row["key"]] = value
-            self._cache[(guild_id, row["key"])] = value
+            self._cache[(guild_id, row["key"])] = (time.monotonic(), value)
         return result
 
     # ----------------------------------------------------------------- write
@@ -174,7 +180,7 @@ class GuildSettingsStore:
             """,
             (guild_id, key, payload, datetime.now(timezone.utc).isoformat(timespec="seconds")),
         )
-        self._cache[(guild_id, key)] = copy.deepcopy(value)
+        self._cache[(guild_id, key)] = (time.monotonic(), copy.deepcopy(value))
 
     async def delete_all(self, guild_id: int) -> None:
         await self.db.execute("DELETE FROM guild_settings WHERE guild_id = ?", (guild_id,))

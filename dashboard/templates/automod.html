@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — запрещённые слова{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Запрещённые слова</h1>
+    <p class="muted">Пул слов и фраз для автомодерации. Настройки действия — в разделе «Автомодерация».</p>
+  </div>
+  <a class="btn" href="/g/{{ guild.id }}/settings?section=automod">Настройки автомодерации</a>
+</div>
+
+<section class="panel">
+  <h2>Добавить слово</h2>
+  <form method="post" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="add">
+    <input type="text" name="word" placeholder="слово или фраза" required maxlength="100">
+    <button class="btn btn-primary" type="submit">Добавить</button>
+  </form>
+  <p class="help">Символ <code>*</code> в конце означает подстроку: <code>дур*</code>.</p>
+</section>
+
+<section class="panel">
+  <h2>Слова ({{ words|length }})</h2>
+  {% if words %}
+    <div class="chips">
+      {% for word in words %}
+        <form method="post" class="chip-form">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="word" value="{{ word }}">
+          <span class="chip">{{ word }}</span>
+          <button class="chip-remove" title="Удалить" type="submit">×</button>
+        </form>
+      {% endfor %}
+    </div>
+    <form method="post" onsubmit="return confirm('Удалить все слова?')">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="clear">
+      <button class="btn btn-danger" type="submit">Очистить всё</button>
+    </form>
+  {% else %}
+    <p class="muted">Список пуст — автомодерация не будет реагировать на слова.</p>
+  {% endif %}
+</section>
+{% endblock %}

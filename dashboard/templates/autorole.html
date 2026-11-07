@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — автороли{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Автовыдача ролей</h1>
+    <p class="muted">Роли, которые бот выдаёт новым участникам или ботам при входе.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <h2>Статус</h2>
+  <form method="post" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="toggle">
+    <label class="switch">
+      <input type="checkbox" name="enabled" {% if enabled %}checked{% endif %}>
+      <span>Автовыдача включена</span>
+    </label>
+    <button class="btn" type="submit">Сохранить</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Добавить роль</h2>
+  <form method="post" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="add">
+    <select name="role_id" required>
+      <option value="">Выберите роль</option>
+      {% for role in roles %}
+        <option value="{{ role.id }}">@{{ role.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="kind">
+      <option value="human">Людям</option>
+      <option value="bot">Ботам</option>
+    </select>
+    <button class="btn btn-primary" type="submit">Добавить</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Текущие автороли</h2>
+  {% if current %}
+    <table class="table">
+      <thead><tr><th>Роль</th><th>Кому</th><th></th></tr></thead>
+      <tbody>
+      {% for item in current %}
+        {% set role = role_map.get(item.role_id) %}
+        <tr>
+          <td>
+            {% if role %}
+              <span class="role-dot" style="background: {{ role|role_color }}"></span> @{{ role.name }}
+            {% else %}
+              <span class="muted">роль {{ item.role_id }} удалена</span>
+            {% endif %}
+          </td>
+          <td>{{ 'ботам' if item.kind == 'bot' else 'людям' }}</td>
+          <td class="right">
+            <form method="post" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="role_id" value="{{ item.role_id }}">
+              <button class="btn btn-danger btn-small" type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Авторолей пока нет.</p>
+  {% endif %}
+</section>
+{% endblock %}

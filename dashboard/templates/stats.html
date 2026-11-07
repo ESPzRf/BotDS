@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — статистика{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Каналы статистики</h1>
+    <p class="muted">Бот переименовывает каналы по счётчикам. Общий переключатель — в настройках.</p>
+  </div>
+  <a class="btn" href="/g/{{ guild.id }}/settings?section=misc">Общие настройки</a>
+</div>
+
+<section class="panel">
+  <h2>Добавить или изменить канал</h2>
+  <form method="post" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="add">
+    <select name="channel_id" required>
+      <option value="">Канал</option>
+      {% for channel in stat_channels %}
+        <option value="{{ channel.id }}">{{ channel|channel_label }}</option>
+      {% endfor %}
+    </select>
+    <select name="kind">
+      <option value="members">Участники</option>
+      <option value="humans">Люди</option>
+      <option value="bots">Боты</option>
+      <option value="boosts">Бусты</option>
+    </select>
+    <input type="text" name="template" value="Участники: {count}" maxlength="100">
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Настроенные каналы</h2>
+  {% if stats_channels %}
+    <table class="table">
+      <thead><tr><th>Канал</th><th>Тип</th><th>Шаблон</th><th></th></tr></thead>
+      <tbody>
+      {% for item in stats_channels %}
+        {% set channel = stat_channel_map.get(item.channel_id) %}
+        <tr>
+          <td>{% if channel %}{{ channel|channel_label }}{% else %}<span class="muted">ID {{ item.channel_id }}</span>{% endif %}</td>
+          <td>{{ item.kind }}</td>
+          <td><code>{{ item.template }}</code></td>
+          <td class="right">
+            <form method="post" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="channel_id" value="{{ item.channel_id }}">
+              <button class="btn btn-danger btn-small" type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Каналы статистики не настроены.</p>
+  {% endif %}
+</section>
+{% endblock %}

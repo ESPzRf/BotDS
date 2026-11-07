@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — доступ к командам{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Доступ к командам</h1>
+    <p class="muted">Списки и отдельные команды. Администраторы и владелец сервера всегда имеют доступ.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <h2>Добавить правило</h2>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <div class="field">
+        <label for="target">Команда или список</label>
+        <input id="target" name="target" list="preset-list" placeholder="moderator или warn" required>
+        <datalist id="preset-list">
+          {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+        </datalist>
+        <div class="help">Доступны списки: {{ preset_names|join(', ') }}. Можно указать точную команду, например <code>warn</code>.</div>
+      </div>
+      <div class="field">
+        <label for="action">Действие</label>
+        <select id="action" name="action">
+          <option value="allow-role">Разрешить роли</option>
+          <option value="deny-role">Запретить роли</option>
+          <option value="allow-user">Разрешить пользователю</option>
+          <option value="deny-user">Запретить пользователю</option>
+          <option value="disable">Отключить команду</option>
+          <option value="enable">Включить команду</option>
+          <option value="reset">Снять все ограничения</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="role_id">Роль</label>
+        <select id="role_id" name="role_id">
+          <option value="">— не использовать —</option>
+          {% for role in roles %}<option value="{{ role.id }}">@{{ role.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="user_id">ID пользователя</label>
+        <input id="user_id" name="user_id" inputmode="numeric" placeholder="123456789012345678">
+      </div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Применить</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Готовые списки</h2>
+  <table class="table">
+    <thead><tr><th>Список</th><th>Команд</th><th>Команды</th></tr></thead>
+    <tbody>
+      {% for name, commands in presets.items() %}
+        <tr>
+          <td><code>{{ name }}</code></td>
+          <td>{{ commands|length }}</td>
+          <td class="muted small">{{ commands|join(', ') }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Текущие правила</h2>
+  {% if rules %}
+    <table class="table rules-table">
+      <thead><tr><th>Команда</th><th>Разрешено</th><th>Запрещено</th><th>Статус</th><th></th></tr></thead>
+      <tbody>
+      {% for name, rule in rules.items() %}
+        <tr>
+          <td><code>{{ name }}</code></td>
+          <td>
+            {% for role_id in rule.allow_roles %}<span class="tag">@{{ role_map.get(role_id, {}).get('name', role_id) }}</span>{% endfor %}
+            {% for user_id in rule.allow_users %}<span class="tag">ID {{ user_id }}</span>{% endfor %}
+            {% if not rule.allow_roles and not rule.allow_users %}<span class="muted">все</span>{% endif %}
+          </td>
+          <td>
+            {% for role_id in rule.deny_roles %}<span class="tag red">@{{ role_map.get(role_id, {}).get('name', role_id) }}</span>{% endfor %}
+            {% for user_id in rule.deny_users %}<span class="tag red">ID {{ user_id }}</span>{% endfor %}
+          </td>
+          <td>{{ '✅' if rule.enabled else '⛔ выключено' }}</td>
+          <td class="right">
+            <form method="post" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="target" value="{{ name }}">
+              <input type="hidden" name="action" value="reset">
+              <button class="btn btn-danger btn-small" type="submit">Сбросить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Ограничений нет — команды работают по правам Discord.</p>
+  {% endif %}
+</section>
+{% endblock %}

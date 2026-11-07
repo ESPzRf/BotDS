@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — роли по кнопкам{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Роли по кнопкам</h1>
+    <p class="muted">Панели создаются командами <code>/selfrole build</code> и <code>/selfrole create</code> в Discord. Здесь — просмотр.</p>
+  </div>
+</div>
+
+{% if panels %}
+  {% for item in panels %}
+    <section class="panel">
+      <h2>{{ item.panel.title }} <span class="muted">#{{ item.panel.id }}</span></h2>
+      <p class="muted">
+        Канал:
+        {% set channel = channel_map.get(item.panel.channel_id) %}
+        {{ channel|channel_label if channel else item.panel.channel_id }}
+        {% if item.panel.message_id %}
+          · <a href="https://discord.com/channels/{{ guild.id }}/{{ item.panel.channel_id }}/{{ item.panel.message_id }}" target="_blank" rel="noopener">открыть сообщение</a>
+        {% endif %}
+      </p>
+      {% if item.options %}
+        <table class="table">
+          <thead><tr><th>Роль</th><th>Подпись</th><th>Группа</th></tr></thead>
+          <tbody>
+          {% for option in item.options %}
+            {% set role = role_map.get(option.role_id) %}
+            <tr>
+              <td>{% if role %}<span class="role-dot" style="background: {{ role|role_color }}"></span> @{{ role.name }}{% else %}<span class="muted">ID {{ option.role_id }}</span>{% endif %}</td>
+              <td>{{ option.label or '—' }}</td>
+              <td class="muted">{{ item.groups.get(option.role_id, '—') }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">В панели нет кнопок.</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <div class="empty">
+    <p>Панелей ролей пока нет.</p>
+    <p class="muted">Создайте панель в Discord командой <code>/selfrole build</code>.</p>
+  </div>
+{% endif %}
+{% endblock %}

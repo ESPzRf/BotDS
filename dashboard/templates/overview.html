@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — обзор{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ guild.name }}</h1>
+    <p class="muted">ID: {{ guild.id }}{% if guild.member_count %} · участников: {{ guild.member_count }}{% endif %}</p>
+  </div>
+  <a class="btn btn-primary" href="/g/{{ guild.id }}/settings">Настроить бота</a>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><span class="stat-value">{{ counts.autoroles }}</span><span>авторолей</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.words }}</span><span>запрещённых слов</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.warnings }}</span><span>активных предупреждений</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.tickets }}</span><span>открытых тикетов</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.panels }}</span><span>панелей ролей</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.giveaways }}</span><span>активных розыгрышей</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.shop }}</span><span>товаров в магазине</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.stats }}</span><span>каналов статистики</span></div>
+</div>
+
+<section class="panel">
+  <h2>Быстрые ссылки</h2>
+  <div class="quick-grid">
+    <a class="quick" href="/g/{{ guild.id }}/autorole">
+      <strong>Автовыдача ролей</strong>
+      <span>Роли новым участникам и ботам</span>
+    </a>
+    <a class="quick" href="/g/{{ guild.id }}/settings?section=logs">
+      <strong>Логи</strong>
+      <span>Каналы событий и модерации</span>
+    </a>
+    <a class="quick" href="/g/{{ guild.id }}/settings?section=automod">
+      <strong>Автомодерация</strong>
+      <span>Действия и исключения</span>
+    </a>
+    <a class="quick" href="/g/{{ guild.id }}/access">
+      <strong>Доступ к командам</strong>
+      <span>Списки для модераторов и игроков</span>
+    </a>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Текущее состояние</h2>
+  <table class="table">
+    <tr><th>Автовыдача ролей</th><td>{{ 'включена' if settings.autorole_enabled else 'выключена' }}</td></tr>
+    <tr><th>Логи</th><td>{% set log = channel_map.get(settings.log_channel) %}{{ log|channel_label if log else 'канал не выбран' }}</td></tr>
+    <tr><th>Автомодерация</th><td>{{ 'включена' if settings.automod_enabled else 'выключена' }}</td></tr>
+    <tr><th>Уровни</th><td>{{ 'включены' if settings.levels_enabled else 'выключены' }}</td></tr>
+    <tr><th>Антирейд</th><td>{{ 'включён' if settings.antiraid_enabled else 'выключен' }}</td></tr>
+    <tr><th>Антиспам</th><td>{{ 'включён' if settings.antispam_enabled else 'выключен' }}</td></tr>
+    <tr><th>Капча</th><td>{{ 'включена' if settings.captcha_enabled else 'выключена' }}</td></tr>
+  </table>
+</section>
+{% endblock %}

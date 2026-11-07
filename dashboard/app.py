@@ -1,0 +1,696 @@
+"""FastAPI-приложение веб-дашборда.
+
+Запуск отдельного сервиса:
+    python dashboard.py
+или:
+    uvicorn dashboard.app:create_app --factory --port 8080
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, AsyncIterator
+from urllib.parse import urlencode
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+
+from core.command_access import COMMAND_PRESETS, CommandRule, normalize_command
+from core.database import Database
+from core.repositories import Repositories, build_repositories
+from core.settings import GuildSettingsStore
+from dashboard.auth import (
+    can_manage_guild,
+    csrf_token,
+    flash,
+    has_guild_access,
+    login_redirect,
+    pop_flashes,
+    session_user,
+    verify_csrf,
+)
+from dashboard.config import DashboardConfig
+from dashboard.discord_api import DiscordAPI, DiscordAPIError
+from dashboard.schema import SECTION_BY_SLUG, SECTIONS, apply_section
+
+log = logging.getLogger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _channel_label(channel: dict[str, Any]) -> str:
+    kind = int(channel.get("type", 0))
+    if kind == 4:
+        return f"📁 {channel.get('name', '')}"
+    if kind == 2:
+        return f"🔊 {channel.get('name', '')}"
+    return f"# {channel.get('name', '')}"
+
+
+templates.env.filters["channel_label"] = _channel_label
+
+
+def _role_color(role: dict[str, Any]) -> str:
+    color = int(role.get("color", 0))
+    return f"#{color:06x}" if color else "#99aab5"
+
+
+templates.env.filters["role_color"] = _role_color
+
+
+def _selectable_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in channels if int(item.get("type", 0)) in {0, 5}]
+
+
+def _stat_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in channels if int(item.get("type", 0)) in {0, 2, 5, 13}]
+
+
+def _selectable_roles(roles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered = [
+        role
+        for role in roles
+        if not role.get("managed")
+        and role.get("name") != "@everyone"
+        and not int(role.get("id", 0)) == 0
+    ]
+    return sorted(filtered, key=lambda item: int(item.get("position", 0)), reverse=True)
+
+
+def create_app(config: DashboardConfig | None = None) -> FastAPI:
+    cfg = config or DashboardConfig.load()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        db = Database(cfg.db_target)
+        await db.connect()
+        app.state.db = db
+        app.state.repos = build_repositories(db)
+        app.state.settings = GuildSettingsStore(db)
+        app.state.api = DiscordAPI(cfg.bot_token)
+        try:
+            yield
+        finally:
+            await app.state.api.close()
+            await db.close()
+
+    app = FastAPI(title="Discord Moderation Dashboard", lifespan=lifespan)
+    app.state.config = cfg
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=cfg.secret,
+        same_site="lax",
+        https_only=cfg.base_url.startswith("https://"),
+        max_age=60 * 60 * 12,
+    )
+    app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+    def render(
+        request: Request,
+        template: str,
+        status_code: int = 200,
+        **context: Any,
+    ) -> HTMLResponse:
+        context.setdefault("user", session_user(request))
+        context.setdefault("flashes", pop_flashes(request))
+        context.setdefault("csrf_token", csrf_token(request))
+        context.setdefault("config", cfg)
+        return templates.TemplateResponse(request, template, context, status_code=status_code)
+
+    def error_page(request: Request, message: str, status: int = 400) -> HTMLResponse:
+        return render(request, "error.html", status_code=status, message=message)
+
+    async def load_guild(
+        request: Request, guild_id: int
+    ) -> tuple[dict[str, Any] | None, Response | None]:
+        user = session_user(request)
+        if user is None:
+            return None, login_redirect(request)
+        if not has_guild_access(user, guild_id):
+            return None, error_page(request, "У вас нет доступа к этому серверу.", 403)
+        try:
+            guild = await request.app.state.api.guild(guild_id)
+            channels = await request.app.state.api.guild_channels(guild_id)
+            roles = await request.app.state.api.guild_roles(guild_id)
+        except DiscordAPIError as exc:
+            return None, error_page(
+                request,
+                f"Не удалось получить данные сервера из Discord: {exc}",
+                502,
+            )
+        except Exception as exc:  # noqa: BLE001 - сеть/таймаут Discord
+            log.exception("Ошибка при загрузке сервера %s", guild_id)
+            return None, error_page(
+                request,
+                f"Ошибка подключения к Discord: {exc}",
+                502,
+            )
+        return (
+            {
+                "guild": guild,
+                "channels": _selectable_channels(channels),
+                "stat_channels": _stat_channels(channels),
+                "roles": _selectable_roles(roles),
+                "all_channels": channels,
+            },
+            None,
+        )
+
+    def guild_context(
+        request: Request,
+        data: dict[str, Any],
+        active: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        context = {
+            "guild": data["guild"],
+            "channels": data["channels"],
+            "stat_channels": data["stat_channels"],
+            "roles": data["roles"],
+            "role_map": {int(role["id"]): role for role in data["roles"]},
+            "channel_map": {int(channel["id"]): channel for channel in data["channels"]},
+            "stat_channel_map": {int(channel["id"]): channel for channel in data["stat_channels"]},
+            "active": active,
+            "section_links": SECTIONS,
+        }
+        context.update(extra)
+        return context
+
+    # ------------------------------------------------------------------ auth
+
+    @app.get("/", response_class=HTMLResponse)
+    async def index(request: Request) -> Response:
+        if session_user(request) is None:
+            return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/guilds", status_code=303)
+
+    @app.get("/login", response_class=HTMLResponse)
+    async def login(request: Request) -> Response:
+        if session_user(request) is not None:
+            return RedirectResponse("/guilds", status_code=303)
+        return render(
+            request,
+            "login.html",
+            oauth_configured=cfg.oauth_configured,
+            dev_mode=cfg.dev_mode,
+            next=request.query_params.get("next", "/guilds"),
+        )
+
+    @app.get("/auth/discord")
+    async def auth_discord(request: Request) -> Response:
+        if not cfg.oauth_configured:
+            return error_page(request, "OAuth не настроен: задайте DISCORD_CLIENT_ID и DISCORD_CLIENT_SECRET.", 503)
+        state = secrets.token_urlsafe(24)
+        request.session["oauth_state"] = state
+        params = urlencode(
+            {
+                "client_id": cfg.client_id,
+                "redirect_uri": cfg.redirect_uri,
+                "response_type": "code",
+                "scope": "identify guilds",
+                "state": state,
+                "prompt": "consent",
+            }
+        )
+        return RedirectResponse(f"https://discord.com/oauth2/authorize?{params}", status_code=303)
+
+    @app.get("/auth/callback")
+    async def auth_callback(request: Request) -> Response:
+        if "error" in request.query_params:
+            return error_page(request, "Вход через Discord отменён.", 400)
+        state = request.query_params.get("state")
+        expected = request.session.pop("oauth_state", None)
+        if not state or state != expected:
+            return error_page(request, "Неверный OAuth state. Попробуйте войти снова.", 400)
+        code = request.query_params.get("code")
+        if not code:
+            return error_page(request, "Discord не вернул код авторизации.", 400)
+        try:
+            token = await request.app.state.api.exchange_code(
+                code, cfg.client_id, cfg.client_secret, cfg.redirect_uri
+            )
+            access_token = token["access_token"]
+            me = await request.app.state.api.oauth_me(access_token)
+            guilds = await request.app.state.api.oauth_guilds(access_token)
+        except (DiscordAPIError, KeyError) as exc:
+            log.warning("OAuth ошибка: %s", exc)
+            return error_page(request, "Не удалось войти через Discord. Попробуйте ещё раз.", 502)
+        except Exception as exc:  # noqa: BLE001 - сеть/таймаут
+            log.exception("OAuth ошибка подключения")
+            return error_page(request, f"Ошибка подключения к Discord: {exc}", 502)
+
+        allowed = []
+        for item in guilds:
+            if can_manage_guild(item.get("permissions")):
+                allowed.append(
+                    {
+                        "id": str(item["id"]),
+                        "name": item.get("name", "Сервер"),
+                        "icon": item.get("icon"),
+                        "allowed": True,
+                    }
+                )
+        request.session["user"] = {
+            "id": str(me["id"]),
+            "username": me.get("global_name") or me.get("username") or "Пользователь",
+            "avatar": me.get("avatar"),
+            "guilds": allowed,
+        }
+        next_url = request.query_params.get("next", "/guilds")
+        if not next_url.startswith("/"):
+            next_url = "/guilds"
+        return RedirectResponse(next_url, status_code=303)
+
+    @app.get("/auth/dev")
+    async def auth_dev(request: Request) -> Response:
+        if not cfg.dev_mode or not cfg.dev_guild_id:
+            return error_page(request, "Dev-вход выключен.", 403)
+        try:
+            guild = await request.app.state.api.guild(cfg.dev_guild_id)
+            name = guild.get("name", "Dev Guild")
+        except DiscordAPIError:
+            name = "Dev Guild"
+        request.session["user"] = {
+            "id": str(cfg.dev_user_id or 0),
+            "username": "Dev Administrator",
+            "avatar": None,
+            "guilds": [
+                {
+                    "id": str(cfg.dev_guild_id),
+                    "name": name,
+                    "icon": None,
+                    "allowed": True,
+                }
+            ],
+        }
+        return RedirectResponse("/guilds", status_code=303)
+
+    @app.get("/logout")
+    async def logout(request: Request) -> Response:
+        request.session.clear()
+        return RedirectResponse("/login", status_code=303)
+
+    @app.get("/guilds", response_class=HTMLResponse)
+    async def guilds_page(request: Request) -> Response:
+        user = session_user(request)
+        if user is None:
+            return login_redirect(request)
+        guilds = [g for g in user.get("guilds", []) if g.get("allowed")]
+        return render(request, "guilds.html", guilds=guilds)
+
+    # -------------------------------------------------------------- overview
+
+    @app.get("/g/{guild_id}", response_class=HTMLResponse)
+    async def overview(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        repos: Repositories = request.app.state.repos
+        db: Database = request.app.state.db
+        counts = {
+            "autoroles": len(await repos.autoroles.list(guild_id)),
+            "words": len(await repos.words.list(guild_id)),
+            "panels": len(await repos.selfroles.panels(guild_id)),
+            "stats": len(await repos.stats.list(guild_id)),
+            "giveaways": len(await repos.giveaways.active(guild_id)),
+            "shop": len(await repos.shop.list(guild_id)),
+        }
+        row = await db.fetchone(
+            "SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND active = 1",
+            (guild_id,),
+        )
+        counts["warnings"] = int(row["n"]) if row is not None else 0
+        row = await db.fetchone(
+            "SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND status = 'open'",
+            (guild_id,),
+        )
+        counts["tickets"] = int(row["n"]) if row is not None else 0
+        settings = await request.app.state.settings.all(guild_id)
+        return render(
+            request,
+            "overview.html",
+            **guild_context(request, data, "overview", counts=counts, settings=settings),
+        )
+
+    # --------------------------------------------------------------- settings
+
+    @app.get("/g/{guild_id}/settings", response_class=HTMLResponse)
+    async def settings_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        slug = request.query_params.get("section", SECTIONS[0].slug)
+        section = SECTION_BY_SLUG.get(slug, SECTIONS[0])
+        values = await request.app.state.settings.all(guild_id)
+        return render(
+            request,
+            "settings.html",
+            **guild_context(
+                request,
+                data,
+                "settings",
+                section=section,
+                values=values,
+                sections=SECTIONS,
+                saved=request.query_params.get("saved") == "1",
+            ),
+        )
+
+    @app.post("/g/{guild_id}/settings/{section_slug}", response_class=HTMLResponse)
+    async def settings_save(request: Request, guild_id: int, section_slug: str) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        section = SECTION_BY_SLUG.get(section_slug)
+        if section is None:
+            return error_page(request, "Раздел настроек не найден.", 404)
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        ok, errors = await apply_section(
+            request.app.state.settings,
+            guild_id,
+            section,
+            form,
+            data["channels"],
+            data["roles"],
+        )
+        if not ok:
+            values = await request.app.state.settings.all(guild_id)
+            return render(
+                request,
+                "settings.html",
+                **guild_context(
+                    request,
+                    data,
+                    "settings",
+                    section=section,
+                    values=values,
+                    sections=SECTIONS,
+                    errors=errors,
+                    saved=False,
+                ),
+            )
+        flash(request, f"Раздел «{section.title}» сохранён.")
+        return RedirectResponse(
+            f"/g/{guild_id}/settings?section={section.slug}&saved=1",
+            status_code=303,
+        )
+
+    # --------------------------------------------------------------- autorole
+
+    @app.get("/g/{guild_id}/autorole", response_class=HTMLResponse)
+    async def autorole_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        current = await request.app.state.repos.autoroles.list(guild_id)
+        enabled = await request.app.state.settings.get_bool(guild_id, "autorole_enabled", True)
+        return render(
+            request,
+            "autorole.html",
+            **guild_context(
+                request,
+                data,
+                "autorole",
+                current=current,
+                enabled=enabled,
+            ),
+        )
+
+    @app.post("/g/{guild_id}/autorole", response_class=HTMLResponse)
+    async def autorole_save(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "")).strip()
+        repo = request.app.state.repos.autoroles
+        try:
+            if action == "add":
+                role_id = int(str(form.get("role_id", "")))
+                if role_id not in {int(role["id"]) for role in data["roles"]}:
+                    raise ValueError("Роль не найдена на сервере.")
+                kind = str(form.get("kind", "human"))
+                if kind not in {"human", "bot"}:
+                    raise ValueError("Неверный тип участника.")
+                added = await repo.add(guild_id, role_id, kind, int(session_user(request)["id"]))
+                flash(
+                    request,
+                    "Автороль добавлена." if added else "Эта автороль уже была добавлена.",
+                    "success" if added else "warning",
+                )
+            elif action == "remove":
+                role_id = int(str(form.get("role_id", "")))
+                removed = await repo.remove(guild_id, role_id)
+                flash(
+                    request,
+                    "Автороль удалена." if removed else "Автороль не найдена.",
+                    "success" if removed else "warning",
+                )
+            elif action == "toggle":
+                enabled = "enabled" in form
+                await request.app.state.settings.set(guild_id, "autorole_enabled", enabled)
+                flash(request, "Автовыдача включена." if enabled else "Автовыдача выключена.")
+            else:
+                raise ValueError("Неизвестное действие.")
+        except (TypeError, ValueError) as exc:
+            flash(request, str(exc), "error")
+        return RedirectResponse(f"/g/{guild_id}/autorole", status_code=303)
+
+    # --------------------------------------------------------------- automod
+
+    @app.get("/g/{guild_id}/automod", response_class=HTMLResponse)
+    async def automod_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        words = await request.app.state.repos.words.list(guild_id)
+        enabled = await request.app.state.settings.get_bool(guild_id, "automod_enabled")
+        return render(
+            request,
+            "automod.html",
+            **guild_context(request, data, "automod", words=words, enabled=enabled),
+        )
+
+    @app.post("/g/{guild_id}/automod", response_class=HTMLResponse)
+    async def automod_save(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "")).strip()
+        repo = request.app.state.repos.words
+        user_id = int(session_user(request)["id"])
+        try:
+            if action == "add":
+                word = str(form.get("word", "")).strip()
+                if not word:
+                    raise ValueError("Введите слово или фразу.")
+                added = await repo.add(guild_id, word, user_id)
+                flash(request, "Слово добавлено." if added else "Такое слово уже есть.", "success" if added else "warning")
+            elif action == "remove":
+                word = str(form.get("word", "")).strip()
+                removed = await repo.remove(guild_id, word)
+                flash(request, "Слово удалено." if removed else "Слово не найдено.", "success" if removed else "warning")
+            elif action == "clear":
+                deleted = await repo.clear(guild_id)
+                flash(request, f"Удалено слов: {deleted}.")
+            else:
+                raise ValueError("Неизвестное действие.")
+        except ValueError as exc:
+            flash(request, str(exc), "error")
+        return RedirectResponse(f"/g/{guild_id}/automod", status_code=303)
+
+    # ----------------------------------------------------------------- access
+
+    @app.get("/g/{guild_id}/access", response_class=HTMLResponse)
+    async def access_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        rules = await request.app.state.repos.access.rules(guild_id)
+        return render(
+            request,
+            "access.html",
+            **guild_context(
+                request,
+                data,
+                "access",
+                rules=rules,
+                presets=COMMAND_PRESETS,
+                preset_names=sorted(COMMAND_PRESETS),
+            ),
+        )
+
+    @app.post("/g/{guild_id}/access", response_class=HTMLResponse)
+    async def access_save(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "")).strip()
+        target = normalize_command(str(form.get("target", "")))
+        if not target:
+            flash(request, "Укажите команду или список.", "error")
+            return RedirectResponse(f"/g/{guild_id}/access", status_code=303)
+        if target == "access" or target.startswith("access "):
+            flash(request, "Нельзя ограничивать саму команду /access.", "error")
+            return RedirectResponse(f"/g/{guild_id}/access", status_code=303)
+        targets = list(COMMAND_PRESETS.get(target, ())) or [target]
+        repo = request.app.state.repos.access
+        changed = 0
+        try:
+            role_id = form.get("role_id")
+            user_id = form.get("user_id")
+            role_id = int(str(role_id)) if role_id else None
+            user_id = int(str(user_id)) if user_id else None
+            known_roles = {int(role["id"]) for role in data["roles"]}
+            if role_id is not None and role_id not in known_roles:
+                raise ValueError("Роль не найдена на сервере.")
+            for command in targets:
+                rule = await repo.get(guild_id, command) or CommandRule(guild_id=guild_id, command=command)
+                if action == "allow-role" and role_id:
+                    rule.allow_roles.add(role_id)
+                    rule.deny_roles.discard(role_id)
+                elif action == "deny-role" and role_id:
+                    rule.deny_roles.add(role_id)
+                    rule.allow_roles.discard(role_id)
+                elif action == "allow-user" and user_id:
+                    rule.allow_users.add(user_id)
+                    rule.deny_users.discard(user_id)
+                elif action == "deny-user" and user_id:
+                    rule.deny_users.add(user_id)
+                    rule.allow_users.discard(user_id)
+                elif action == "disable":
+                    rule.enabled = False
+                elif action == "enable":
+                    rule.enabled = True
+                elif action == "reset":
+                    if await repo.delete(guild_id, command):
+                        changed += 1
+                    continue
+                else:
+                    raise ValueError("Неверное действие или не указана роль/пользователь.")
+                if rule.is_empty():
+                    await repo.delete(guild_id, command)
+                else:
+                    await repo.save(rule)
+                changed += 1
+        except (TypeError, ValueError) as exc:
+            flash(request, str(exc), "error")
+            return RedirectResponse(f"/g/{guild_id}/access", status_code=303)
+        # Инвалидируем кэш бота не можем напрямую — у него TTL; панель пишет в БД.
+        flash(request, f"Обновлено правил: {changed}.")
+        return RedirectResponse(f"/g/{guild_id}/access", status_code=303)
+
+    # --------------------------------------------------------------- selfrole
+
+    @app.get("/g/{guild_id}/selfrole", response_class=HTMLResponse)
+    async def selfrole_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        panels = await request.app.state.repos.selfroles.panels(guild_id)
+        panel_data = []
+        for panel in panels:
+            options = await request.app.state.repos.selfroles.options(panel.id)
+            groups = await request.app.state.repos.selfroles.groups(panel.id)
+            panel_data.append({"panel": panel, "options": options, "groups": groups})
+        return render(
+            request,
+            "selfrole.html",
+            **guild_context(request, data, "selfrole", panels=panel_data),
+        )
+
+    # ------------------------------------------------------------------ stats
+
+    @app.get("/g/{guild_id}/stats", response_class=HTMLResponse)
+    async def stats_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        channels = await request.app.state.repos.stats.list(guild_id)
+        return render(
+            request,
+            "stats.html",
+            **guild_context(request, data, "stats", stats_channels=channels),
+        )
+
+    @app.post("/g/{guild_id}/stats", response_class=HTMLResponse)
+    async def stats_save(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "")).strip()
+        repo = request.app.state.repos.stats
+        try:
+            if action == "add":
+                channel_id = int(str(form.get("channel_id", "")))
+                if channel_id not in {int(item["id"]) for item in data["stat_channels"]}:
+                    raise ValueError("Канал не найден на сервере.")
+                kind = str(form.get("kind", "members"))
+                if kind not in {"members", "humans", "bots", "boosts"}:
+                    raise ValueError("Неверный тип статистики.")
+                template = str(form.get("template", "Участники: {count}")).strip() or "Участники: {count}"
+                if "{count}" not in template:
+                    raise ValueError("Шаблон должен содержать {count}.")
+                await repo.upsert(guild_id, channel_id, kind, template)
+                flash(request, "Канал статистики сохранён.")
+            elif action == "remove":
+                channel_id = int(str(form.get("channel_id", "")))
+                removed = await repo.remove(guild_id, channel_id)
+                flash(request, "Канал удалён." if removed else "Канал не найден.", "success" if removed else "warning")
+            else:
+                raise ValueError("Неизвестное действие.")
+        except (TypeError, ValueError) as exc:
+            flash(request, str(exc), "error")
+        return RedirectResponse(f"/g/{guild_id}/stats", status_code=303)
+
+    # ----------------------------------------------------------------- health
+
+    @app.get("/healthz")
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.exception_handler(DiscordAPIError)
+    async def discord_error(request: Request, exc: DiscordAPIError) -> Response:
+        return error_page(request, f"Ошибка Discord API: {exc}", 502)
+
+    return app
+
+
+app: FastAPI | None
+try:
+    app = create_app()
+except Exception as exc:  # noqa: BLE001 - без конфигурации приложение запускает dashboard.py
+    log.debug("Dashboard app не создан при импорте: %s", exc)
+    app = None

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Панель бота{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <a href="/guilds" class="brand-link">🛡️ Bot Dashboard</a>
+    {% if guild %}
+      <span class="sep">/</span>
+      <a href="/g/{{ guild.id }}" class="guild-link">{{ guild.name }}</a>
+    {% endif %}
+  </div>
+  <div class="userbox">
+    {% if user %}
+      <span class="user-name">{{ user.username }}</span>
+      <a class="btn btn-ghost" href="/logout">Выйти</a>
+    {% endif %}
+  </div>
+</header>
+
+{% if guild %}
+<nav class="sidenav">
+  <a class="{{ 'active' if active == 'overview' else '' }}" href="/g/{{ guild.id }}">Обзор</a>
+  <a class="{{ 'active' if active == 'autorole' else '' }}" href="/g/{{ guild.id }}/autorole">Автороли</a>
+  <a class="{{ 'active' if active == 'settings' else '' }}" href="/g/{{ guild.id }}/settings">Настройки</a>
+  <a class="{{ 'active' if active == 'automod' else '' }}" href="/g/{{ guild.id }}/automod">Запрещённые слова</a>
+  <a class="{{ 'active' if active == 'access' else '' }}" href="/g/{{ guild.id }}/access">Доступ к командам</a>
+  <a class="{{ 'active' if active == 'selfrole' else '' }}" href="/g/{{ guild.id }}/selfrole">Роли по кнопкам</a>
+  <a class="{{ 'active' if active == 'stats' else '' }}" href="/g/{{ guild.id }}/stats">Статистика</a>
+</nav>
+{% endif %}
+
+<main class="{{ 'with-nav' if guild else 'centered' }}">
+  {% for item in flashes %}
+    <div class="flash {{ item.kind }}">{{ item.message }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer">Отдельный сервис панели. Бот и панель используют одну базу данных.</footer>
+</body>
+</html>

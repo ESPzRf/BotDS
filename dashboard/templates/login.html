@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Вход — панель бота{% endblock %}
+{% block content %}
+<section class="login-card">
+  <h1>Вход в панель</h1>
+  <p>Панель управляет настройками бота на ваших серверах. Нужны права <b>Управлять сервером</b>.</p>
+
+  {% if oauth_configured %}
+    <a class="btn btn-primary btn-wide" href="/auth/discord">Войти через Discord</a>
+  {% else %}
+    <div class="flash error">OAuth не настроен. Задайте <code>DISCORD_CLIENT_ID</code> и <code>DISCORD_CLIENT_SECRET</code> в <code>.env</code>.</div>
+  {% endif %}
+
+  {% if dev_mode %}
+    <hr>
+    <p class="muted">Локальный режим разработки:</p>
+    <a class="btn btn-ghost btn-wide" href="/auth/dev">Войти как Dev Administrator</a>
+  {% endif %}
+</section>
+{% endblock %}
