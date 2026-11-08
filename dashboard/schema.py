@@ -12,6 +12,27 @@ from typing import Any, Iterable
 
 from core.settings import GuildSettingsStore
 
+DANGEROUS_ROLE_BITS: tuple[tuple[int, str], ...] = (
+    (1 << 3, "администратор"),
+    (1 << 5, "управление сервером"),
+    (1 << 28, "управление ролями"),
+    (1 << 4, "управление каналами"),
+    (1 << 1, "кик участников"),
+    (1 << 2, "бан участников"),
+    (1 << 40, "тайм-аут участников"),
+    (1 << 29, "управление вебхуками"),
+    (1 << 17, "упоминание @everyone"),
+)
+
+
+def dangerous_role_label(role: dict[str, Any]) -> str | None:
+    try:
+        bits = int(str(role.get("permissions", 0)))
+    except (TypeError, ValueError):
+        return None
+    labels = [label for bit, label in DANGEROUS_ROLE_BITS if bits & bit]
+    return ", ".join(labels) if labels else None
+
 
 @dataclass(frozen=True, slots=True)
 class Field:
@@ -242,8 +263,13 @@ def parse_field(
             role_id = int(raw)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"{field.label}: неверная роль.") from exc
-        if role_id not in role_ids:
+        role = next((item for item in roles if int(item["id"]) == role_id), None)
+        if role is None:
             raise ValueError(f"{field.label}: роль не найдена на сервере.")
+        if field.key in {"captcha_role", "captcha_unverified_role"}:
+            danger = dangerous_role_label(role)
+            if danger:
+                raise ValueError(f"{field.label}: у роли опасные права ({danger}).")
         return role_id
     if field.kind == "channels":
         result: list[int] = []

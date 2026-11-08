@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -27,6 +28,7 @@ class Shop(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._buy_lock = asyncio.Lock()
 
     # --------------------------------------------------------------- commands
 
@@ -141,29 +143,41 @@ class Shop(commands.Cog):
         if role in member.roles:
             raise UserError("У вас уже есть эта роль.")
 
-        stats = await self.bot.repos.members.ensure(guild.id, member.id)
-        if stats.loyalty < item.price:
-            raise UserError(
-                f"Недостаточно лояльности: нужно **{format_number(item.price)}**, "
-                f"у вас **{format_number(stats.loyalty)}**."
-            )
-
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        stats.loyalty -= item.price
-        await self.bot.repos.members.save(stats)
+        async with self._buy_lock:
+            await self.bot.repos.members.ensure(guild.id, member.id)
+            spent = await self.bot.repos.members.try_spend_loyalty(
+                guild.id, member.id, item.price
+            )
+            if not spent:
+                stats = await self.bot.repos.members.ensure(guild.id, member.id)
+                raise UserError(
+                    f"Недостаточно лояльности: нужно **{format_number(item.price)}**, "
+                    f"у вас **{format_number(stats.loyalty)}**."
+                )
 
-        try:
-            await member.add_roles(role, reason=f"Покупка в магазине #{item.id}")
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            stats.loyalty += item.price
-            await self.bot.repos.members.save(stats)
-            raise UserError(f"Не удалось выдать роль, баллы возвращены: {exc}") from exc
+            reserved = False
+            if item.stock is not None:
+                reserved = await self.bot.repos.shop.decrement_stock(item.id)
+                if not reserved:
+                    await self.bot.repos.members.add_loyalty(guild.id, member.id, item.price)
+                    raise UserError("Товар закончился — баллы не списаны.")
 
-        if item.stock is not None:
-            await self.bot.repos.shop.decrement_stock(item.id)
-        await self.bot.repos.shop.record_purchase(guild.id, member.id, item.id, item.price)
+            try:
+                await member.add_roles(role, reason=f"Покупка в магазине #{item.id}")
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                await self.bot.repos.members.add_loyalty(guild.id, member.id, item.price)
+                if reserved:
+                    await self.bot.repos.shop.increment_stock(item.id)
+                raise UserError(f"Не удалось выдать роль, баллы возвращены: {exc}") from exc
 
+            try:
+                await self.bot.repos.shop.record_purchase(guild.id, member.id, item.id, item.price)
+            except Exception:  # noqa: BLE001 - покупка уже совершена
+                log.exception("Не удалось записать покупку товара #%s", item.id)
+
+        stats = await self.bot.repos.members.ensure(guild.id, member.id)
         embed = success_embed(
             f"Вы купили **{item.name}** за **{format_number(item.price)}** лояльности.\n"
             f"Роль {role.mention} выдана. Остаток: **{format_number(stats.loyalty)}**."

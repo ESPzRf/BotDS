@@ -59,12 +59,14 @@ esac
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
+    chmod 600 .env 2>/dev/null || true
     echo
     echo "[!] Создан файл .env"
     echo "    Вставьте DISCORD_TOKEN и настройки панели, затем запустите ./start.sh снова."
     echo
     exit 1
 fi
+chmod 600 .env 2>/dev/null || true
 
 if grep -Eq '^DISCORD_TOKEN=(PASTE_TOKEN_HERE)?[[:space:]]*$' .env; then
     echo

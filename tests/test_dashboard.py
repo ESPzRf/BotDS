@@ -59,6 +59,7 @@ class DashboardSchemaTests(unittest.TestCase):
             "overview.html",
             "settings.html",
             "autorole.html",
+            "moderation.html",
             "automod.html",
             "access.html",
             "selfrole.html",
@@ -121,6 +122,7 @@ class DashboardAppTests(unittest.TestCase):
             "/g/1/settings?section=levels",
             "/g/1/settings?section=security",
             "/g/1/autorole",
+            "/g/1/moderation",
             "/g/1/automod",
             "/g/1/access",
             "/g/1/selfrole",
@@ -157,6 +159,21 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Сохранено", response.text)
         self.assertIn('value="10" selected', response.text)
+
+    def test_quick_toggle(self) -> None:
+        import re
+
+        page = self.client.get("/g/1")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/toggle/automod_enabled",
+            data={"csrf": token.group(1), "value": "1", "next": "/g/1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        page = self.client.get("/g/1/settings?section=automod")
+        self.assertIn("Включено", page.text)
 
     def test_autorole_add(self) -> None:
         page = self.client.get("/g/1/autorole")

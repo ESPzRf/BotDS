@@ -29,7 +29,9 @@
     <select name="role_id" required>
       <option value="">Выберите роль</option>
       {% for role in roles %}
-        <option value="{{ role.id }}">@{{ role.name }}</option>
+        <option value="{{ role.id }}" {% if role.id|int in dangerous_role_ids %}disabled{% endif %}>
+          @{{ role.name }}{% if role.id|int in dangerous_role_ids %} ⚠️ опасные права{% endif %}
+        </option>
       {% endfor %}
     </select>
     <select name="kind">
@@ -38,6 +40,7 @@
     </select>
     <button class="btn btn-primary" type="submit">Добавить</button>
   </form>
+  <p class="help">Роли с административными правами и правами модерации заблокированы — это защита от случайной выдачи доступа.</p>
 </section>
 
 <section class="panel">

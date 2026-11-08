@@ -146,6 +146,12 @@ class Appeals(commands.Cog):
                 ephemeral=True,
             )
             return
+        if appeal.user_id == member.id:
+            await interaction.response.send_message(
+                embed=warning_embed("Нельзя рассматривать собственную апелляцию."),
+                ephemeral=True,
+            )
+            return
         if appeal.status != "pending":
             await interaction.response.send_message(
                 embed=warning_embed("Эта апелляция уже рассмотрена."),
@@ -161,18 +167,18 @@ class Appeals(commands.Cog):
             )
             return
 
+        status = "approved" if approve else "denied"
+        if not await self.bot.repos.appeals.set_status(appeal.id, status, member.id):
+            await interaction.response.send_message(
+                embed=warning_embed("Эту апелляцию уже рассмотрел другой модератор."),
+                ephemeral=True,
+            )
+            return
+
         if approve:
-            if not warning.active:
-                await interaction.response.send_message(
-                    embed=warning_embed("Предупреждение уже снято."),
-                    ephemeral=True,
-                )
-                return
             await self.bot.repos.warnings.deactivate(warning.id, guild.id)
-            await self.bot.repos.appeals.set_status(appeal.id, "approved", member.id)
             status_text = "✅ Апелляция одобрена, предупреждение снято."
         else:
-            await self.bot.repos.appeals.set_status(appeal.id, "denied", member.id)
             status_text = "❌ Апелляция отклонена."
 
         updated = await self.bot.repos.appeals.get(appeal.id)
@@ -242,7 +248,17 @@ class Appeals(commands.Cog):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        appeal_id = await self.bot.repos.appeals.add(guild.id, warning_id, member.id, reason.strip()[:1500])
+        try:
+            appeal_id = await self.bot.repos.appeals.add(
+                guild.id, warning_id, member.id, reason.strip()[:1500]
+            )
+        except Exception as exc:  # noqa: BLE001 - гонка unique-индекса pending
+            pending = await self.bot.repos.appeals.pending_for_warning(warning_id)
+            if pending is not None:
+                raise UserError(
+                    f"По предупреждению #{warning_id} уже есть апелляция #{pending.id}."
+                ) from exc
+            raise UserError("Не удалось создать апелляцию. Попробуйте ещё раз.") from exc
         appeal = await self.bot.repos.appeals.get(appeal_id)
         if appeal is None:  # pragma: no cover
             raise UserError("Не удалось создать апелляцию.")

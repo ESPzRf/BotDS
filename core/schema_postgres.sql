@@ -142,6 +142,16 @@ CREATE INDEX IF NOT EXISTS idx_tickets_user
 CREATE INDEX IF NOT EXISTS idx_tickets_channel
     ON tickets (channel_id);
 
+UPDATE tickets
+SET status = 'closed', closed_at = COALESCE(closed_at, created_at)
+WHERE status = 'open'
+  AND id NOT IN (
+      SELECT MIN(id) FROM tickets WHERE status = 'open' GROUP BY guild_id, user_id
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_one_open
+    ON tickets (guild_id, user_id) WHERE status = 'open';
+
 -- ---------------------------------------------------------------------------
 -- Временные наказания
 -- ---------------------------------------------------------------------------
@@ -181,6 +191,16 @@ CREATE TABLE IF NOT EXISTS appeals (
 
 CREATE INDEX IF NOT EXISTS idx_appeals_pending
     ON appeals (guild_id, status);
+
+UPDATE appeals
+SET status = 'denied'
+WHERE status = 'pending'
+  AND id NOT IN (
+      SELECT MIN(id) FROM appeals WHERE status = 'pending' GROUP BY warning_id
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_pending
+    ON appeals (warning_id) WHERE status = 'pending';
 
 -- ---------------------------------------------------------------------------
 -- Розыгрыши

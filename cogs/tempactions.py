@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import discord
 from discord import app_commands
@@ -14,7 +13,6 @@ from core.discord_utils import resolve_modlog_channel
 from core.embeds import (
     COLOR_DANGER,
     COLOR_MUTED,
-    COLOR_SUCCESS,
     COLOR_WARNING,
     base_embed,
     success_embed,
@@ -41,7 +39,13 @@ class TempActions(commands.Cog):
         self.bot = bot
 
     async def cog_load(self) -> None:
-        self._check_due.start()
+        if self.bot.is_ready() and not self._check_due.is_running():
+            self._check_due.start()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self._check_due.is_running():
+            self._check_due.start()
 
     def cog_unload(self) -> None:
         self._check_due.cancel()
@@ -50,49 +54,56 @@ class TempActions(commands.Cog):
 
     @tasks.loop(seconds=30)
     async def _check_due(self) -> None:
+        await self.bot.wait_until_ready()
         try:
             now = to_iso(datetime.now(timezone.utc))
             due = await self.bot.repos.temp_actions.due(now)
-        except Exception:  # noqa: BLE001
-            log.exception("Не удалось проверить временные наказания")
-            return
+            for action in due:
+                guild = self.bot.get_guild(action.guild_id)
+                if guild is None:
+                    await self.bot.repos.temp_actions.deactivate(action.id)
+                    continue
 
-        for action in due:
-            guild = self.bot.get_guild(action.guild_id)
-            if guild is None:
+                success, note = await self._release(guild, action)
+                if not success:
+                    log.warning(
+                        "Не удалось снять временное наказание #%s (%s): %s",
+                        action.id,
+                        action.action,
+                        note,
+                    )
+                    continue
                 await self.bot.repos.temp_actions.deactivate(action.id)
-                continue
 
-            note = await self._release(guild, action)
-            await self.bot.repos.temp_actions.deactivate(action.id)
+                embed = base_embed(title="⏰ Временное наказание истекло", color=COLOR_MUTED)
+                embed.add_field(name="Участник", value=f"<@{action.user_id}> (`{action.user_id}`)", inline=True)
+                embed.add_field(name="Действие", value=action.action, inline=True)
+                embed.add_field(name="Результат", value=note, inline=False)
+                embed.add_field(name="Причина", value=truncate(action.reason, 1024), inline=False)
+                await self._log(guild, embed)
+        except Exception:  # noqa: BLE001 - цикл не должен умирать
+            log.exception("Не удалось проверить временные наказания")
 
-            embed = base_embed(title="⏰ Временное наказание истекло", color=COLOR_MUTED)
-            embed.add_field(name="Участник", value=f"<@{action.user_id}> (`{action.user_id}`)", inline=True)
-            embed.add_field(name="Действие", value=action.action, inline=True)
-            embed.add_field(name="Результат", value=note, inline=False)
-            embed.add_field(name="Причина", value=truncate(action.reason, 1024), inline=False)
-            await self._log(guild, embed)
-
-    async def _release(self, guild: discord.Guild, action: TempAction) -> str:
+    async def _release(self, guild: discord.Guild, action: TempAction) -> tuple[bool, str]:
         reason = f"Временное наказание #{action.id} истекло"
         try:
             if action.action == "ban":
                 await guild.unban(discord.Object(id=action.user_id), reason=reason)
-                return "бан снят"
+                return True, "бан снят"
             if action.action == "timeout":
                 member = guild.get_member(action.user_id)
                 if member is None:
                     try:
                         member = await guild.fetch_member(action.user_id)
                     except (discord.NotFound, discord.HTTPException):
-                        return "участник уже не на сервере"
+                        return True, "участник уже не на сервере"
                 await member.timeout(None, reason=reason)
-                return "тайм-аут снят"
+                return True, "тайм-аут снят"
         except discord.NotFound:
-            return "наказание уже снято"
+            return True, "наказание уже снято"
         except (discord.Forbidden, discord.HTTPException) as exc:
-            return f"не удалось снять: {exc}"
-        return "неизвестное действие"
+            return False, f"не удалось снять: {exc}"
+        return False, "неизвестное действие"
 
     async def _log(self, guild: discord.Guild, embed: discord.Embed) -> None:
         channel = await resolve_modlog_channel(self.bot, guild)

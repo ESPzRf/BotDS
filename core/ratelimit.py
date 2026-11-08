@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Any, Hashable
+from typing import Hashable
 
 
 class SlidingWindow:

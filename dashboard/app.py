@@ -37,7 +37,7 @@ from dashboard.auth import (
 )
 from dashboard.config import DashboardConfig
 from dashboard.discord_api import DiscordAPI, DiscordAPIError
-from dashboard.schema import SECTION_BY_SLUG, SECTIONS, apply_section
+from dashboard.schema import SECTION_BY_SLUG, SECTIONS, apply_section, dangerous_role_label
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +65,26 @@ def _role_color(role: dict[str, Any]) -> str:
 templates.env.filters["role_color"] = _role_color
 
 
+def _guild_icon(guild: dict[str, Any], size: int = 128) -> str:
+    icon = guild.get("icon")
+    if not icon:
+        return ""
+    return f"https://cdn.discordapp.com/icons/{guild.get('id')}/{icon}.png?size={size}"
+
+
+templates.env.filters["guild_icon"] = _guild_icon
+
+TOGGLE_SETTINGS = {
+    "autorole_enabled": "autorole_enabled",
+    "automod_enabled": "automod_enabled",
+    "levels_enabled": "levels_enabled",
+    "antiraid_enabled": "antiraid_enabled",
+    "antispam_enabled": "antispam_enabled",
+    "captcha_enabled": "captcha_enabled",
+    "stats_enabled": "stats_enabled",
+}
+
+
 def _selectable_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [item for item in channels if int(item.get("type", 0)) in {0, 5}]
 
@@ -82,6 +102,24 @@ def _selectable_roles(roles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         and not int(role.get("id", 0)) == 0
     ]
     return sorted(filtered, key=lambda item: int(item.get("position", 0)), reverse=True)
+
+
+def _member_permissions(
+    guild: dict[str, Any],
+    roles: list[dict[str, Any]],
+    member: dict[str, Any],
+) -> int:
+    if int(guild.get("owner_id", 0)) == int(member["user"]["id"]):
+        return 1 << 3
+    role_ids = {int(item) for item in member.get("roles", [])}
+    bits = 0
+    for role in roles:
+        if role.get("name") == "@everyone" or int(role.get("id", 0)) in role_ids:
+            try:
+                bits |= int(str(role.get("permissions", 0)))
+            except (TypeError, ValueError):
+                continue
+    return bits
 
 
 def create_app(config: DashboardConfig | None = None) -> FastAPI:
@@ -139,7 +177,23 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             guild = await request.app.state.api.guild(guild_id)
             channels = await request.app.state.api.guild_channels(guild_id)
             roles = await request.app.state.api.guild_roles(guild_id)
+            user_id = int(user.get("id", 0))
+            if not (cfg.dev_mode and user_id == cfg.dev_user_id):
+                member = await request.app.state.api.guild_member(guild_id, user_id)
+                permissions = _member_permissions(guild, roles, member)
+                if not permissions & ((1 << 3) | (1 << 5)):
+                    return None, error_page(
+                        request,
+                        "У вас больше нет права «Управлять сервером» на этом сервере.",
+                        403,
+                    )
         except DiscordAPIError as exc:
+            if exc.status == 404:
+                return None, error_page(
+                    request,
+                    "Вы больше не участник этого сервера или бот не имеет к нему доступа.",
+                    403,
+                )
             return None, error_page(
                 request,
                 f"Не удалось получить данные сервера из Discord: {exc}",
@@ -179,6 +233,10 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             "stat_channel_map": {int(channel["id"]): channel for channel in data["stat_channels"]},
             "active": active,
             "section_links": SECTIONS,
+            "guilds": [
+                item for item in (session_user(request) or {}).get("guilds", [])
+                if item.get("allowed")
+            ],
         }
         context.update(extra)
         return context
@@ -342,6 +400,25 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
 
     # --------------------------------------------------------------- settings
 
+    @app.post("/g/{guild_id}/toggle/{key}", response_class=HTMLResponse)
+    async def toggle_setting(request: Request, guild_id: int, key: str) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        setting_key = TOGGLE_SETTINGS.get(key)
+        if setting_key is None:
+            return error_page(request, "Неизвестный переключатель.", 404)
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        enabled = str(form.get("value", "0")) == "1"
+        await request.app.state.settings.set(guild_id, setting_key, enabled)
+        flash(request, "Модуль включён." if enabled else "Модуль выключен.")
+        next_url = str(form.get("next", f"/g/{guild_id}"))
+        if not next_url.startswith(f"/g/{guild_id}"):
+            next_url = f"/g/{guild_id}"
+        return RedirectResponse(next_url, status_code=303)
+
     @app.get("/g/{guild_id}/settings", response_class=HTMLResponse)
     async def settings_page(request: Request, guild_id: int) -> Response:
         data, response = await load_guild(request, guild_id)
@@ -407,6 +484,31 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             status_code=303,
         )
 
+    # --------------------------------------------------------------- moderation
+
+    @app.get("/g/{guild_id}/moderation", response_class=HTMLResponse)
+    async def moderation_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        repos: Repositories = request.app.state.repos
+        warnings = await repos.warnings.recent(guild_id, limit=25)
+        temp_actions = await repos.temp_actions.active_for_guild(guild_id)
+        appeals = await repos.appeals.pending(guild_id)
+        return render(
+            request,
+            "moderation.html",
+            **guild_context(
+                request,
+                data,
+                "moderation",
+                warnings=warnings,
+                temp_actions=temp_actions,
+                appeals=appeals,
+            ),
+        )
+
     # --------------------------------------------------------------- autorole
 
     @app.get("/g/{guild_id}/autorole", response_class=HTMLResponse)
@@ -417,6 +519,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         assert data is not None
         current = await request.app.state.repos.autoroles.list(guild_id)
         enabled = await request.app.state.settings.get_bool(guild_id, "autorole_enabled", True)
+        dangerous = {int(role["id"]) for role in data["roles"] if dangerous_role_label(role)}
         return render(
             request,
             "autorole.html",
@@ -426,6 +529,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 "autorole",
                 current=current,
                 enabled=enabled,
+                dangerous_role_ids=dangerous,
             ),
         )
 
@@ -443,8 +547,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         try:
             if action == "add":
                 role_id = int(str(form.get("role_id", "")))
-                if role_id not in {int(role["id"]) for role in data["roles"]}:
+                role = next((item for item in data["roles"] if int(item["id"]) == role_id), None)
+                if role is None:
                     raise ValueError("Роль не найдена на сервере.")
+                danger = dangerous_role_label(role)
+                if danger:
+                    raise ValueError(f"Роль с опасными правами нельзя добавлять в автороли: {danger}.")
                 kind = str(form.get("kind", "human"))
                 if kind not in {"human", "bot"}:
                     raise ValueError("Неверный тип участника.")

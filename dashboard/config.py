@@ -7,6 +7,7 @@ import os
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from config import PROJECT_ROOT
 from core.env import load_dotenv
@@ -91,6 +92,16 @@ class DashboardConfig:
             raise RuntimeError(
                 "Для DASHBOARD_DEV_MODE=1 задайте DASHBOARD_DEV_GUILD_ID (ID сервера)."
             )
+        if dev_mode:
+            hostname = (urlparse(base_url).hostname or "").lower()
+            loopback = hostname in {"127.0.0.1", "localhost", "::1"}
+            allow_public = env("DASHBOARD_ALLOW_PUBLIC_DEV").lower() in {"1", "true", "yes", "on"}
+            if not loopback and not allow_public:
+                raise RuntimeError(
+                    "DASHBOARD_DEV_MODE=1 запрещён на публичном адресе. "
+                    "Используйте OAuth или явно задайте DASHBOARD_ALLOW_PUBLIC_DEV=1 "
+                    "(небезопасно)."
+                )
 
         ssl_cert = optional_path("DASHBOARD_SSL_CERT")
         ssl_key = optional_path("DASHBOARD_SSL_KEY")

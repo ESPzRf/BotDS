@@ -105,15 +105,18 @@ class Levels(commands.Cog):
         gain = scaled_amount(base_xp, xp_multiplier)
         loyalty_gain = scaled_amount(base_loyalty, loyalty_multiplier)
 
-        old_level = stats.level
-        stats.xp += gain
-        stats.messages += 1
-        stats.loyalty += loyalty_gain
-        stats.last_xp_at = now
-
-        new_level = progress(stats.xp).level
-        stats.level = new_level
-        await self.bot.repos.members.save(stats)
+        old_level = progress(stats.xp).level
+        new_stats = await self.bot.repos.members.add_progress(
+            guild.id,
+            message.author.id,
+            xp=gain,
+            loyalty=loyalty_gain,
+            messages=1,
+            last_xp_at=now,
+        )
+        new_level = progress(new_stats.xp).level
+        if new_level > new_stats.level:
+            await self.bot.repos.members.raise_level(guild.id, message.author.id, new_level)
 
         if new_level > old_level:
             await self._on_level_up(
@@ -254,24 +257,40 @@ class Levels(commands.Cog):
         """Меняет XP/лояльность вручную, пересчитывает уровень и награды."""
 
         guild = member.guild
-        stats = await self.bot.repos.members.ensure(guild.id, member.id)
-        old_xp = stats.xp
-        old_loyalty = stats.loyalty
+        current = await self.bot.repos.members.ensure(guild.id, member.id)
+        old_xp = current.xp
+        old_loyalty = current.loyalty
         old_level = progress(old_xp).level
 
         if xp_set is not None:
-            stats.xp = max(0, int(xp_set))
-        else:
-            stats.xp = max(0, stats.xp + int(xp_delta))
+            await self.bot.repos.members.set_values(guild.id, member.id, xp=max(0, int(xp_set)))
+        elif xp_delta:
+            if xp_delta > 0:
+                await self.bot.repos.members.add_progress(guild.id, member.id, xp=int(xp_delta))
+            else:
+                await self.bot.repos.members.set_values(
+                    guild.id, member.id, xp=max(0, old_xp + int(xp_delta))
+                )
 
         if loyalty_set is not None:
-            stats.loyalty = max(0, int(loyalty_set))
-        else:
-            stats.loyalty = max(0, stats.loyalty + int(loyalty_delta))
+            await self.bot.repos.members.set_values(
+                guild.id, member.id, loyalty=max(0, int(loyalty_set))
+            )
+        elif loyalty_delta:
+            if loyalty_delta > 0:
+                await self.bot.repos.members.add_progress(
+                    guild.id, member.id, loyalty=int(loyalty_delta)
+                )
+            else:
+                await self.bot.repos.members.set_values(
+                    guild.id, member.id, loyalty=max(0, old_loyalty + int(loyalty_delta))
+                )
 
+        stats = await self.bot.repos.members.ensure(guild.id, member.id)
         new_level = progress(stats.xp).level
-        stats.level = new_level
-        await self.bot.repos.members.save(stats)
+        if new_level > stats.level:
+            await self.bot.repos.members.raise_level(guild.id, member.id, new_level)
+            stats.level = new_level
 
         if new_level > old_level:
             await self._on_level_up(guild, member, old_level, new_level, channel=channel)
@@ -483,12 +502,20 @@ class Levels(commands.Cog):
         reward = loyalty_reward(streak, base, step, cap)
         _, loyalty_multiplier = await self._multipliers(guild, member)
         reward = scaled_amount(reward, loyalty_multiplier)
+        cutoff = now - timedelta(seconds=DAILY_COOLDOWN_SECONDS)
 
-        stats.loyalty += reward
-        stats.last_daily_at = now
-        stats.daily_streak = streak
-        await self.bot.repos.members.save(stats)
+        claimed = await self.bot.repos.members.claim_daily(
+            guild.id,
+            member.id,
+            reward,
+            now,
+            cutoff,
+            streak,
+        )
+        if not claimed:
+            raise UserError("Награда уже получена. Попробуйте позже.")
 
+        stats = await self.bot.repos.members.ensure(guild.id, member.id)
         tier = loyalty_tier(stats.loyalty)
         embed = success_embed(
             f"Вы получили **{reward}** лояльности.\n"

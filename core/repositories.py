@@ -492,6 +492,130 @@ class MemberRepo:
             ),
         )
 
+    async def add_progress(
+        self,
+        guild_id: int,
+        user_id: int,
+        *,
+        xp: int = 0,
+        loyalty: int = 0,
+        messages: int = 0,
+        last_xp_at: datetime | None = None,
+    ) -> MemberStats:
+        """Атомарно прибавляет XP/лояльность/сообщения, не перезаписывая строку целиком."""
+
+        await self.db.execute(
+            """
+            INSERT INTO members (guild_id, user_id, xp, loyalty, messages, last_xp_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (guild_id, user_id) DO UPDATE SET
+                xp = members.xp + excluded.xp,
+                loyalty = members.loyalty + excluded.loyalty,
+                messages = members.messages + excluded.messages,
+                last_xp_at = COALESCE(excluded.last_xp_at, members.last_xp_at)
+            """,
+            (guild_id, user_id, max(0, xp), max(0, loyalty), max(0, messages), to_iso(last_xp_at)),
+        )
+        stats = await self.get(guild_id, user_id)
+        return stats or MemberStats.empty(guild_id, user_id)
+
+    async def set_values(
+        self,
+        guild_id: int,
+        user_id: int,
+        *,
+        xp: int | None = None,
+        loyalty: int | None = None,
+        level: int | None = None,
+    ) -> MemberStats:
+        """Обновляет только переданные поля — без перезаписи всей строки."""
+
+        sets: list[str] = []
+        params: list[Any] = []
+        if xp is not None:
+            sets.append("xp = ?")
+            params.append(max(0, int(xp)))
+        if loyalty is not None:
+            sets.append("loyalty = ?")
+            params.append(max(0, int(loyalty)))
+        if level is not None:
+            sets.append("level = ?")
+            params.append(max(0, int(level)))
+        if sets:
+            params.extend((guild_id, user_id))
+            await self.db.execute(
+                f"UPDATE members SET {', '.join(sets)} WHERE guild_id = ? AND user_id = ?",
+                tuple(params),
+            )
+        return await self.ensure(guild_id, user_id)
+
+    async def raise_level(self, guild_id: int, user_id: int, level: int) -> None:
+        await self.db.execute(
+            """
+            UPDATE members SET level = CASE WHEN level < ? THEN ? ELSE level END
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (max(0, level), max(0, level), guild_id, user_id),
+        )
+
+    async def try_spend_loyalty(self, guild_id: int, user_id: int, amount: int) -> bool:
+        """Атомарно списывает лояльность; False — если баланса не хватает."""
+
+        if amount <= 0:
+            return True
+        changed = await self.db.execute(
+            """
+            UPDATE members SET loyalty = loyalty - ?
+            WHERE guild_id = ? AND user_id = ? AND loyalty >= ?
+            """,
+            (int(amount), guild_id, user_id, int(amount)),
+        )
+        return changed > 0
+
+    async def add_loyalty(self, guild_id: int, user_id: int, amount: int) -> None:
+        if amount == 0:
+            return
+        if amount > 0:
+            await self.add_progress(guild_id, user_id, loyalty=int(amount))
+            return
+        await self.db.execute(
+            """
+            UPDATE members
+            SET loyalty = CASE WHEN loyalty + ? < 0 THEN 0 ELSE loyalty + ? END
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (int(amount), int(amount), guild_id, user_id),
+        )
+
+    async def claim_daily(
+        self,
+        guild_id: int,
+        user_id: int,
+        reward: int,
+        now: datetime,
+        cooldown_cutoff: datetime,
+        streak: int,
+    ) -> bool:
+        """Атомарно выдаёт дейли; False — если награда уже получена."""
+
+        changed = await self.db.execute(
+            """
+            UPDATE members
+            SET loyalty = loyalty + ?, last_daily_at = ?, daily_streak = ?
+            WHERE guild_id = ? AND user_id = ?
+              AND (last_daily_at IS NULL OR last_daily_at <= ?)
+            """,
+            (
+                max(0, int(reward)),
+                to_iso(now),
+                max(1, int(streak)),
+                guild_id,
+                user_id,
+                to_iso(cooldown_cutoff),
+            ),
+        )
+        return changed > 0
+
     async def leaderboard(self, guild_id: int, metric: str = "xp", limit: int = 10) -> list[MemberStats]:
         metric = self._check_metric(metric)
         rows = await self.db.fetchall(
@@ -1238,6 +1362,12 @@ class ShopRepo:
             (item_id,),
         )
         return changed > 0
+
+    async def increment_stock(self, item_id: int) -> None:
+        await self.db.execute(
+            "UPDATE shop_items SET stock = stock + 1 WHERE id = ? AND stock IS NOT NULL",
+            (item_id,),
+        )
 
     async def record_purchase(self, guild_id: int, user_id: int, item_id: int, price: int) -> None:
         await self.db.execute(

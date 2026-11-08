@@ -169,6 +169,25 @@ class SelfRoleTests(DatabaseTestCase):
         self.assertEqual(panel.description, "Описание")
         self.assertEqual(panel.color, 0xFF0000)
 
+    async def test_atomic_progress_and_daily(self) -> None:
+        await self.repos.members.add_progress(1, 42, xp=10, loyalty=2, messages=1)
+        await self.repos.members.add_progress(1, 42, xp=15, loyalty=3, messages=1)
+        stats = await self.repos.members.ensure(1, 42)
+        self.assertEqual((stats.xp, stats.loyalty, stats.messages), (25, 5, 2))
+
+        self.assertTrue(await self.repos.members.try_spend_loyalty(1, 42, 3))
+        self.assertFalse(await self.repos.members.try_spend_loyalty(1, 42, 99))
+        stats = await self.repos.members.ensure(1, 42)
+        self.assertEqual(stats.loyalty, 2)
+
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(hours=22)
+        self.assertTrue(await self.repos.members.claim_daily(1, 42, 10, now, cutoff, 1))
+        self.assertFalse(await self.repos.members.claim_daily(1, 42, 10, now, cutoff, 1))
+        stats = await self.repos.members.ensure(1, 42)
+        self.assertEqual(stats.loyalty, 12)
+        self.assertEqual(stats.daily_streak, 1)
+
     async def test_exclusive_groups(self) -> None:
         panel_id = await self.repos.selfroles.create_panel(1, 500, "Роли")
         await self.repos.selfroles.add_option(panel_id, 50)
@@ -303,6 +322,12 @@ class TicketTests(DatabaseTestCase):
         assert ticket is not None
         self.assertIsNone(ticket.panel_id)
 
+    async def test_only_one_open_ticket(self) -> None:
+        panel_id = await self.repos.tickets.create_panel(1, 500, "Панель")
+        await self.repos.tickets.create_ticket(1, panel_id, 600, 42)
+        with self.assertRaises(Exception):
+            await self.repos.tickets.create_ticket(1, panel_id, 601, 42)
+
 
 class TempActionTests(DatabaseTestCase):
     async def test_due_and_deactivate(self) -> None:
@@ -351,6 +376,12 @@ class AppealTests(DatabaseTestCase):
         self.assertEqual(updated.status, "approved")
         self.assertEqual(updated.reviewed_by, 99)
         self.assertIsNotNone(updated.reviewed_at)
+
+    async def test_only_one_pending_appeal(self) -> None:
+        warning_id = await self.repos.warnings.add(1, 42, 99, "спам")
+        await self.repos.appeals.add(1, warning_id, 42, "Первая")
+        with self.assertRaises(Exception):
+            await self.repos.appeals.add(1, warning_id, 42, "Вторая")
 
 
 class GiveawayTests(DatabaseTestCase):

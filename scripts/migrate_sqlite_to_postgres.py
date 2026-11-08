@@ -29,6 +29,8 @@ TABLES: tuple[str, ...] = (
     "guild_settings",
     "selfrole_panels",
     "selfrole_options",
+    "selfrole_exclusive",
+    "command_access",
     "autoroles",
     "banned_words",
     "warnings",

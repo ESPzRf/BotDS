@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
+      args:
+        WITH_POSTGRES: "1"
     env_file: .env
     environment:
       DASHBOARD_HOST: 0.0.0.0

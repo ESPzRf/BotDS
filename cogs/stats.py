@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from core.embeds import COLOR_MUTED, COLOR_SUCCESS, base_embed, success_embed
+from core.embeds import COLOR_MUTED, base_embed, success_embed
 from core.errors import UserError
 from core.repositories import StatsChannel
 from core.utils import truncate
@@ -47,15 +47,19 @@ class Stats(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._human_bot_cache: dict[int, tuple[int, int]] = {}
 
     async def cog_load(self) -> None:
-        self._update_loop.start()
+        if self.bot.is_ready() and not self._update_loop.is_running():
+            self._update_loop.start()
 
     def cog_unload(self) -> None:
         self._update_loop.cancel()
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        if not self._update_loop.is_running():
+            self._update_loop.start()
         try:
             await self._update_all()
         except Exception:  # noqa: BLE001
@@ -63,11 +67,16 @@ class Stats(commands.Cog):
 
     @tasks.loop(seconds=600)
     async def _update_loop(self) -> None:
-        await self._update_all()
+        await self.bot.wait_until_ready()
+        try:
+            await self._update_all()
+        except Exception:  # noqa: BLE001 - цикл не должен умирать
+            log.exception("Не удалось обновить статистику")
 
     async def _update_all(self) -> None:
         if not await self._enabled_anywhere():
             return
+        self._human_bot_cache.clear()
         channels = await self.bot.repos.stats.all()
         for item in channels:
             await self._update_channel(item)
@@ -81,10 +90,13 @@ class Stats(commands.Cog):
     def _count(self, guild: discord.Guild, kind: str) -> int:
         if kind == "members":
             return guild.member_count or 0
-        if kind == "humans":
-            return sum(1 for member in guild.members if not member.bot)
-        if kind == "bots":
-            return sum(1 for member in guild.members if member.bot)
+        if kind in {"humans", "bots"}:
+            cached = self._human_bot_cache.get(guild.id)
+            if cached is None:
+                humans = sum(1 for member in guild.members if not member.bot)
+                cached = (humans, len(guild.members) - humans)
+                self._human_bot_cache[guild.id] = cached
+            return cached[0] if kind == "humans" else cached[1]
         if kind == "boosts":
             return guild.premium_subscription_count or 0
         return 0

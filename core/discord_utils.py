@@ -122,13 +122,40 @@ async def find_audit_entry(
 # ---------------------------------------------------------------------------
 
 
+_DANGEROUS_ROLE_PERMISSIONS: tuple[tuple[str, str], ...] = (
+    ("administrator", "администратор"),
+    ("manage_guild", "управление сервером"),
+    ("manage_roles", "управление ролями"),
+    ("manage_channels", "управление каналами"),
+    ("kick_members", "кик участников"),
+    ("ban_members", "бан участников"),
+    ("moderate_members", "тайм-аут участников"),
+    ("manage_webhooks", "управление вебхуками"),
+    ("mention_everyone", "упоминание @everyone"),
+)
+
+
+def dangerous_role_permissions(role: discord.Role) -> str | None:
+    """Возвращает описание опасных прав роли, если их нельзя выдавать массово."""
+
+    permissions = role.permissions
+    found = [label for attr, label in _DANGEROUS_ROLE_PERMISSIONS if getattr(permissions, attr, False)]
+    if not found:
+        return None
+    return ", ".join(found)
+
+
 def role_assign_problem(guild: discord.Guild, role: discord.Role) -> str | None:
-    """Возвращает причину, по которой бот не сможет выдать роль, или None."""
+    """Возвращает причину, по которой бот не сможет безопасно выдать роль, или None."""
 
     if role.is_default():
         return "роль @everyone нельзя выдавать"
     if role.managed:
         return "роль управляется интеграцией и не может быть назначена вручную"
+
+    dangerous = dangerous_role_permissions(role)
+    if dangerous:
+        return f"у роли опасные права: {dangerous}"
 
     me = guild.me
     if me is None:

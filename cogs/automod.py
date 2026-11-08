@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import discord
 from discord import app_commands
@@ -46,16 +47,17 @@ class AutoMod(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self._matchers: dict[int, WordMatcher] = {}
+        self._matchers: dict[int, tuple[float, WordMatcher]] = {}
 
     # --------------------------------------------------------------- matcher
 
     async def _matcher(self, guild_id: int) -> WordMatcher:
-        matcher = self._matchers.get(guild_id)
-        if matcher is None:
-            words = await self.bot.repos.words.list(guild_id)
-            matcher = WordMatcher(words)
-            self._matchers[guild_id] = matcher
+        cached = self._matchers.get(guild_id)
+        if cached is not None and time.monotonic() - cached[0] < 15:
+            return cached[1]
+        words = await self.bot.repos.words.list(guild_id)
+        matcher = WordMatcher(words)
+        self._matchers[guild_id] = (time.monotonic(), matcher)
         return matcher
 
     def _invalidate(self, guild_id: int) -> None:

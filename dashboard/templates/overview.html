@@ -3,10 +3,11 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <div class="eyebrow">Панель управления</div>
     <h1>{{ guild.name }}</h1>
     <p class="muted">ID: {{ guild.id }}{% if guild.member_count %} · участников: {{ guild.member_count }}{% endif %}</p>
   </div>
-  <a class="btn btn-primary" href="/g/{{ guild.id }}/settings">Настроить бота</a>
+  <a class="btn btn-primary" href="/g/{{ guild.id }}/settings">⚙️ Настроить бота</a>
 </div>
 
 <div class="stat-grid">
@@ -15,43 +16,187 @@
   <div class="stat"><span class="stat-value">{{ counts.warnings }}</span><span>активных предупреждений</span></div>
   <div class="stat"><span class="stat-value">{{ counts.tickets }}</span><span>открытых тикетов</span></div>
   <div class="stat"><span class="stat-value">{{ counts.panels }}</span><span>панелей ролей</span></div>
-  <div class="stat"><span class="stat-value">{{ counts.giveaways }}</span><span>активных розыгрышей</span></div>
-  <div class="stat"><span class="stat-value">{{ counts.shop }}</span><span>товаров в магазине</span></div>
-  <div class="stat"><span class="stat-value">{{ counts.stats }}</span><span>каналов статистики</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.giveaways }}</span><span>розыгрышей</span></div>
 </div>
 
 <section class="panel">
-  <h2>Быстрые ссылки</h2>
-  <div class="quick-grid">
-    <a class="quick" href="/g/{{ guild.id }}/autorole">
-      <strong>Автовыдача ролей</strong>
-      <span>Роли новым участникам и ботам</span>
-    </a>
-    <a class="quick" href="/g/{{ guild.id }}/settings?section=logs">
-      <strong>Логи</strong>
-      <span>Каналы событий и модерации</span>
-    </a>
-    <a class="quick" href="/g/{{ guild.id }}/settings?section=automod">
-      <strong>Автомодерация</strong>
-      <span>Действия и исключения</span>
-    </a>
-    <a class="quick" href="/g/{{ guild.id }}/access">
-      <strong>Доступ к командам</strong>
-      <span>Списки для модераторов и игроков</span>
-    </a>
+  <div class="panel-head">
+    <div>
+      <h2>Модули</h2>
+      <p class="muted">Включайте и выключайте функции одним кликом. Тонкие настройки — внутри модуля.</p>
+    </div>
+  </div>
+
+  <div class="module-grid">
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🎭</div>
+        <span class="badge {{ 'on' if settings.autorole_enabled else 'off' }}">{{ 'включено' if settings.autorole_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Автороли</div>
+        <div class="module-desc">Выдавать роли новым участникам и ботам автоматически.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/autorole">Открыть</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/autorole_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.autorole_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.autorole_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.autorole_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🚫</div>
+        <span class="badge {{ 'on' if settings.automod_enabled else 'off' }}">{{ 'включено' if settings.automod_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Автомодерация</div>
+        <div class="module-desc">Фильтр запрещённых слов, удаление, предупреждения и тайм-ауты.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/automod">Слова</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/automod_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.automod_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.automod_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.automod_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">📈</div>
+        <span class="badge {{ 'on' if settings.levels_enabled else 'off' }}">{{ 'включено' if settings.levels_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Уровни и лояльность</div>
+        <div class="module-desc">XP за сообщения, ежедневные награды и множители.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/settings?section=levels">Настроить</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/levels_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.levels_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.levels_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.levels_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🚨</div>
+        <span class="badge {{ 'on' if settings.antiraid_enabled else 'off' }}">{{ 'включено' if settings.antiraid_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Антирейд</div>
+        <div class="module-desc">Реакция на массовые входы и новые аккаунты.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/settings?section=security">Настроить</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/antiraid_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.antiraid_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.antiraid_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.antiraid_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🔁</div>
+        <span class="badge {{ 'on' if settings.antispam_enabled else 'off' }}">{{ 'включено' if settings.antispam_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Антиспам</div>
+        <div class="module-desc">Порог сообщений, удаление и тайм-аут нарушителю.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/settings?section=security">Настроить</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/antispam_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.antispam_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.antispam_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.antispam_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🤖</div>
+        <span class="badge {{ 'on' if settings.captcha_enabled else 'off' }}">{{ 'включено' if settings.captcha_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Капча</div>
+        <div class="module-desc">Проверка новых участников кодом в личных сообщениях.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/settings?section=security">Настроить</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/captcha_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.captcha_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.captcha_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.captcha_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">📊</div>
+        <span class="badge {{ 'on' if settings.stats_enabled else 'off' }}">{{ 'включено' if settings.stats_enabled else 'выключено' }}</span>
+      </div>
+      <div>
+        <div class="module-title">Статистика</div>
+        <div class="module-desc">Счётчики участников, ботов и бустов в каналах.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/stats">Каналы</a>
+        <form method="post" action="/g/{{ guild.id }}/toggle/stats_enabled">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="/g/{{ guild.id }}">
+          <input type="hidden" name="value" value="{{ 0 if settings.stats_enabled else 1 }}">
+          <button class="btn btn-small {{ 'btn-danger' if settings.stats_enabled else 'btn-success' }}" type="submit">
+            {{ 'Выключить' if settings.stats_enabled else 'Включить' }}
+          </button>
+        </form>
+      </div>
+    </article>
+
+    <article class="module-card">
+      <div class="module-top">
+        <div class="module-icon">🔐</div>
+        <span class="badge">списки</span>
+      </div>
+      <div>
+        <div class="module-title">Доступ к командам</div>
+        <div class="module-desc">Роли и пользователи: кому какие команды доступны.</div>
+      </div>
+      <div class="module-actions">
+        <a class="btn btn-small" href="/g/{{ guild.id }}/access">Открыть</a>
+        <a class="btn btn-small btn-ghost" href="/g/{{ guild.id }}/settings?section=tickets">Тикеты</a>
+      </div>
+    </article>
   </div>
 </section>
 
-<section class="panel">
-  <h2>Текущее состояние</h2>
-  <table class="table">
-    <tr><th>Автовыдача ролей</th><td>{{ 'включена' if settings.autorole_enabled else 'выключена' }}</td></tr>
-    <tr><th>Логи</th><td>{% set log = channel_map.get(settings.log_channel) %}{{ log|channel_label if log else 'канал не выбран' }}</td></tr>
-    <tr><th>Автомодерация</th><td>{{ 'включена' if settings.automod_enabled else 'выключена' }}</td></tr>
-    <tr><th>Уровни</th><td>{{ 'включены' if settings.levels_enabled else 'выключены' }}</td></tr>
-    <tr><th>Антирейд</th><td>{{ 'включён' if settings.antiraid_enabled else 'выключен' }}</td></tr>
-    <tr><th>Антиспам</th><td>{{ 'включён' if settings.antispam_enabled else 'выключен' }}</td></tr>
-    <tr><th>Капча</th><td>{{ 'включена' if settings.captcha_enabled else 'выключена' }}</td></tr>
-  </table>
-</section>
 {% endblock %}

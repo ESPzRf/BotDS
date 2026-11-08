@@ -66,8 +66,13 @@ class Giveaways(commands.Cog):
                     self.bot.add_view(GiveawayView(self, giveaway.id))
                 except Exception:  # noqa: BLE001
                     log.exception("Не удалось восстановить розыгрыш #%s", giveaway.id)
+        if self.bot.is_ready() and not self._finish_loop.is_running():
+            self._finish_loop.start()
 
-        self._finish_loop.start()
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self._finish_loop.is_running():
+            self._finish_loop.start()
 
     def cog_unload(self) -> None:
         self._finish_loop.cancel()
@@ -107,41 +112,41 @@ class Giveaways(commands.Cog):
 
     @tasks.loop(seconds=30)
     async def _finish_loop(self) -> None:
+        await self.bot.wait_until_ready()
         try:
             due = await self.bot.repos.giveaways.due(to_iso(datetime.now(timezone.utc)))
-        except Exception:  # noqa: BLE001
+            for giveaway in due:
+                await self._finish(giveaway)
+        except Exception:  # noqa: BLE001 - цикл не должен умирать
             log.exception("Не удалось проверить завершённые розыгрыши")
-            return
-        for giveaway in due:
-            await self._finish(giveaway)
 
     async def _finish(self, giveaway: Giveaway) -> None:
+        guild = self.bot.get_guild(giveaway.guild_id)
+        if guild is None:
+            return
+        channel = guild.get_channel(giveaway.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
         if not await self.bot.repos.giveaways.finish(giveaway.id):
             return
 
         entries = await self.bot.repos.giveaways.entries(giveaway.id)
         winners = pick_winners(entries, giveaway.winners_count)
-        guild = self.bot.get_guild(giveaway.guild_id)
-        if guild is None:
-            return
-
-        channel = guild.get_channel(giveaway.channel_id)
-        if isinstance(channel, discord.TextChannel):
-            try:
-                if giveaway.message_id:
-                    message = await channel.fetch_message(giveaway.message_id)
-                    ended = await self.bot.repos.giveaways.get(giveaway.id)
-                    if ended is not None:
-                        await message.edit(embed=await self._embed(ended, winners=winners), view=None)
-                if winners:
-                    await channel.send(
-                        content="🎉 Победители: " + ", ".join(f"<@{user_id}>" for user_id in winners),
-                        allowed_mentions=discord.AllowedMentions(users=True),
-                    )
-                else:
-                    await channel.send("🎉 Розыгрыш завершён без участников.")
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                log.debug("Не удалось объявить победителей", exc_info=True)
+        try:
+            if giveaway.message_id:
+                message = await channel.fetch_message(giveaway.message_id)
+                ended = await self.bot.repos.giveaways.get(giveaway.id)
+                if ended is not None:
+                    await message.edit(embed=await self._embed(ended, winners=winners), view=None)
+            if winners:
+                await channel.send(
+                    content="🎉 Победители: " + ", ".join(f"<@{user_id}>" for user_id in winners),
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
+            else:
+                await channel.send("🎉 Розыгрыш завершён без участников.")
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            log.debug("Не удалось объявить победителей", exc_info=True)
 
         for user_id in winners:
             try:

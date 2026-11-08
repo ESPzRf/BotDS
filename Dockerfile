@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY bot.py config.py ./
 COPY core ./core
 COPY cogs ./cogs
+COPY locales ./locales
 
 RUN mkdir -p /app/data /app/logs
 

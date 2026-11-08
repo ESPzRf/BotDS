@@ -80,6 +80,9 @@ class DiscordAPI:
     async def guild_roles(self, guild_id: int) -> list[dict[str, Any]]:
         return await self._request("GET", f"/guilds/{guild_id}/roles")
 
+    async def guild_member(self, guild_id: int, user_id: int) -> dict[str, Any]:
+        return await self._request("GET", f"/guilds/{guild_id}/members/{user_id}")
+
     async def bot_guilds(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/users/@me/guilds")
 

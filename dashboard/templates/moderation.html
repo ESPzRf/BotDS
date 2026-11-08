@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — модерация{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Модерация</div>
+    <h1>Последние действия</h1>
+    <p class="muted">История предупреждений, активные наказания и ожидающие апелляции.</p>
+  </div>
+  <a class="btn" href="/g/{{ guild.id }}/settings?section=warnings">⚙️ Настройки предупреждений</a>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Предупреждения</h2>
+    <a class="btn btn-small" href="/g/{{ guild.id }}/settings?section=warnings">Пороги</a>
+  </div>
+  {% if warnings %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Участник</th><th>Причина</th><th>Модератор</th><th>Статус</th><th>Когда</th></tr></thead>
+      <tbody>
+      {% for item in warnings %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td><a href="https://discord.com/users/{{ item.user_id }}" target="_blank" rel="noopener">ID {{ item.user_id }}</a></td>
+          <td>{{ item.reason[:140] }}{% if item.reason|length > 140 %}…{% endif %}</td>
+          <td>{% if item.moderator_id %}ID {{ item.moderator_id }}{% else %}автомод{% endif %}</td>
+          <td><span class="badge {{ 'warn' if item.active else 'off' }}">{{ 'активно' if item.active else 'снято' }}</span></td>
+          <td class="muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Предупреждений пока нет.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Активные наказания</h2>
+  </div>
+  {% if temp_actions %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Участник</th><th>Действие</th><th>Истекает</th><th>Причина</th></tr></thead>
+      <tbody>
+      {% for item in temp_actions %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td>ID {{ item.user_id }}</td>
+          <td><span class="badge warn">{{ item.action }}</span></td>
+          <td class="muted">{{ item.expires_at.strftime('%d.%m.%Y %H:%M') if item.expires_at else '—' }}</td>
+          <td>{{ item.reason[:140] }}{% if item.reason|length > 140 %}…{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Активных временных наказаний нет.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Ожидающие апелляции</h2>
+  </div>
+  {% if appeals %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Предупреждение</th><th>Участник</th><th>Причина</th></tr></thead>
+      <tbody>
+      {% for item in appeals %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td>#{{ item.warning_id }}</td>
+          <td>ID {{ item.user_id }}</td>
+          <td>{{ item.reason[:180] }}{% if item.reason|length > 180 %}…{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Ожидающих апелляций нет.</p>
+  {% endif %}
+</section>
+{% endblock %}

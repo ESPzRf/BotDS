@@ -7,40 +7,108 @@
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <a href="/guilds" class="brand-link">🛡️ Bot Dashboard</a>
+<div class="app-shell {% if not guild %}no-guild{% endif %}">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-mark">🛡️</span>
+      <div>
+        <strong>Bot Panel</strong>
+        <span>moderation suite</span>
+      </div>
+    </div>
+
     {% if guild %}
-      <span class="sep">/</span>
-      <a href="/g/{{ guild.id }}" class="guild-link">{{ guild.name }}</a>
-    {% endif %}
-  </div>
-  <div class="userbox">
-    {% if user %}
-      <span class="user-name">{{ user.username }}</span>
-      <a class="btn btn-ghost" href="/logout">Выйти</a>
-    {% endif %}
-  </div>
-</header>
+      <div class="server-switcher">
+        <div class="server-avatar">
+          {% if guild|guild_icon %}
+            <img src="{{ guild|guild_icon(64) }}" alt="">
+          {% else %}
+            {{ guild.name[:1] }}
+          {% endif %}
+        </div>
+        <div class="server-meta">
+          <strong>{{ guild.name }}</strong>
+          <select onchange="if (this.value) location.href='/g/' + this.value">
+            {% for item in guilds %}
+              <option value="{{ item.id }}" {% if item.id|string == guild.id|string %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
 
-{% if guild %}
-<nav class="sidenav">
-  <a class="{{ 'active' if active == 'overview' else '' }}" href="/g/{{ guild.id }}">Обзор</a>
-  <a class="{{ 'active' if active == 'autorole' else '' }}" href="/g/{{ guild.id }}/autorole">Автороли</a>
-  <a class="{{ 'active' if active == 'settings' else '' }}" href="/g/{{ guild.id }}/settings">Настройки</a>
-  <a class="{{ 'active' if active == 'automod' else '' }}" href="/g/{{ guild.id }}/automod">Запрещённые слова</a>
-  <a class="{{ 'active' if active == 'access' else '' }}" href="/g/{{ guild.id }}/access">Доступ к командам</a>
-  <a class="{{ 'active' if active == 'selfrole' else '' }}" href="/g/{{ guild.id }}/selfrole">Роли по кнопкам</a>
-  <a class="{{ 'active' if active == 'stats' else '' }}" href="/g/{{ guild.id }}/stats">Статистика</a>
-</nav>
-{% endif %}
+      <nav class="side-nav">
+        <span class="nav-label">Сервер</span>
+        <a class="{{ 'active' if active == 'overview' else '' }}" href="/g/{{ guild.id }}">
+          <span class="nav-icon">▦</span> Обзор
+        </a>
+        <a class="{{ 'active' if active == 'autorole' else '' }}" href="/g/{{ guild.id }}/autorole">
+          <span class="nav-icon">🎭</span> Автороли
+        </a>
+        <a class="{{ 'active' if active == 'moderation' else '' }}" href="/g/{{ guild.id }}/moderation">
+          <span class="nav-icon">⚖️</span> Модерация
+        </a>
 
-<main class="{{ 'with-nav' if guild else 'centered' }}">
-  {% for item in flashes %}
-    <div class="flash {{ item.kind }}">{{ item.message }}</div>
-  {% endfor %}
-  {% block content %}{% endblock %}
-</main>
-<footer class="footer">Отдельный сервис панели. Бот и панель используют одну базу данных.</footer>
+        <span class="nav-label">Модули</span>
+        <a class="{{ 'active' if active == 'settings' else '' }}" href="/g/{{ guild.id }}/settings">
+          <span class="nav-icon">⚙️</span> Настройки
+        </a>
+        <a class="{{ 'active' if active == 'automod' else '' }}" href="/g/{{ guild.id }}/automod">
+          <span class="nav-icon">🚫</span> Запрещённые слова
+        </a>
+        <a class="{{ 'active' if active == 'access' else '' }}" href="/g/{{ guild.id }}/access">
+          <span class="nav-icon">🔐</span> Доступ к командам
+        </a>
+        <a class="{{ 'active' if active == 'selfrole' else '' }}" href="/g/{{ guild.id }}/selfrole">
+          <span class="nav-icon">🎛️</span> Роли по кнопкам
+        </a>
+        <a class="{{ 'active' if active == 'stats' else '' }}" href="/g/{{ guild.id }}/stats">
+          <span class="nav-icon">📊</span> Статистика
+        </a>
+
+        <span class="nav-label">Аккаунт</span>
+        <a href="/guilds"><span class="nav-icon">↩</span> Все серверы</a>
+        <a href="/logout"><span class="nav-icon">⎋</span> Выйти</a>
+      </nav>
+    {% endif %}
+
+    <div class="sidebar-footer">
+      <span class="status-dot online"></span> сервис работает
+    </div>
+  </aside>
+
+  <div class="content-wrap">
+    <header class="topbar">
+      <button class="icon-btn mobile-menu" type="button" onclick="document.body.classList.toggle('nav-open')">☰</button>
+      <div class="crumbs">
+        {% if guild %}
+          <a href="/guilds">Серверы</a><span>/</span><span>{{ guild.name }}</span>
+          {% if active %}<span>/</span><span class="crumb-current">{{ active }}</span>{% endif %}
+        {% else %}
+          <span>Панель управления</span>
+        {% endif %}
+      </div>
+      <div class="top-actions">
+        {% if user %}
+          <span class="user-chip">{{ user.username[:1]|upper }} · {{ user.username }}</span>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="page">
+      {% for item in flashes %}
+        <div class="toast {{ item.kind }}">{{ item.message }}</div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">Bot Panel · отдельный сервис · общая база с ботом</footer>
+  </div>
+</div>
+<script>
+  document.addEventListener('click', function (event) {
+    if (document.body.classList.contains('nav-open') && !event.target.closest('#sidebar') && !event.target.closest('.mobile-menu')) {
+      document.body.classList.remove('nav-open');
+    }
+  });
+</script>
 </body>
 </html>

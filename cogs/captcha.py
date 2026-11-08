@@ -141,7 +141,13 @@ class Captcha(commands.Cog):
                 self.bot.add_view(CaptchaView(self, item.guild_id, item.user_id))
             except Exception:  # noqa: BLE001
                 log.exception("Не удалось восстановить капчу для %s", item.user_id)
-        self._expire_loop.start()
+        if self.bot.is_ready() and not self._expire_loop.is_running():
+            self._expire_loop.start()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self._expire_loop.is_running():
+            self._expire_loop.start()
 
     def cog_unload(self) -> None:
         self._expire_loop.cancel()
@@ -211,24 +217,24 @@ class Captcha(commands.Cog):
 
     @tasks.loop(seconds=60)
     async def _expire_loop(self) -> None:
+        await self.bot.wait_until_ready()
         try:
             now = to_iso(datetime.now(timezone.utc))
             due = await self.bot.repos.captcha.due(now)
-        except Exception:  # noqa: BLE001
+            for item in due:
+                await self._expire(item)
+        except Exception:  # noqa: BLE001 - цикл не должен умирать
             log.exception("Не удалось проверить просроченные капчи")
-            return
-
-        for item in due:
-            await self._expire(item)
 
     async def _expire(self, item: CaptchaPending) -> None:
         guild = self.bot.get_guild(item.guild_id)
-        await self.bot.repos.captcha.delete(item.guild_id, item.user_id)
         if guild is None:
+            await self.bot.repos.captcha.delete(item.guild_id, item.user_id)
             return
 
         member = guild.get_member(item.user_id)
         if member is None:
+            await self.bot.repos.captcha.delete(item.guild_id, item.user_id)
             return
 
         kicked = False
@@ -238,6 +244,8 @@ class Captcha(commands.Cog):
                 kicked = True
             except (discord.Forbidden, discord.HTTPException):
                 log.debug("Не удалось кикнуть не прошедшего капчу", exc_info=True)
+
+        await self.bot.repos.captcha.delete(item.guild_id, item.user_id)
 
         embed = base_embed(title="⌛ Капча истекла", color=COLOR_MUTED)
         embed.add_field(name="Участник", value=f"{member} (`{member.id}`)", inline=True)
@@ -264,6 +272,10 @@ class Captcha(commands.Cog):
         verified_role_id = await self.bot.settings.get(guild.id, "captcha_role")
         verified_role = guild.get_role(int(verified_role_id)) if verified_role_id else None
         if verified_role is None:
+            return None
+        problem = role_assign_problem(guild, verified_role)
+        if problem:
+            log.warning("Капча: роль проверки небезопасна (%s): %s", verified_role.id, problem)
             return None
 
         unverified_role_id = await self.bot.settings.get(guild.id, "captcha_unverified_role")

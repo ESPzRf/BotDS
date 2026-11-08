@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ guild.name }} — настройки{% endblock %}
 {% block content %}
+{% set icons = {'logs': '🧾', 'automod': '🚫', 'warnings': '⚠️', 'levels': '📈', 'security': '🛡️', 'tickets': '🎫', 'misc': '🧩'} %}
+
 <div class="page-head">
   <div>
+    <div class="eyebrow">Конфигурация</div>
     <h1>Настройки бота</h1>
     <p class="muted">Изменения сохраняются в общую базу и применяются ботом в течение ~15 секунд.</p>
   </div>
@@ -11,29 +14,32 @@
 <div class="tabs">
   {% for item in sections %}
     <a class="{{ 'active' if item.slug == section.slug else '' }}"
-       href="/g/{{ guild.id }}/settings?section={{ item.slug }}">{{ item.title }}</a>
+       href="/g/{{ guild.id }}/settings?section={{ item.slug }}">{{ icons.get(item.slug, '•') }} {{ item.title }}</a>
   {% endfor %}
 </div>
 
-{% if saved %}
-  <div class="flash success">Сохранено.</div>
-{% endif %}
+{% if saved %}<div class="toast success">Сохранено.</div>{% endif %}
 {% if errors %}
-  <div class="flash error">
+  <div class="toast error">
     {% for item in errors %}<div>{{ item }}</div>{% endfor %}
   </div>
 {% endif %}
 
 <section class="panel">
-  <h2>{{ section.title }}</h2>
-  <p class="muted">{{ section.description }}</p>
+  <div class="panel-head">
+    <div>
+      <h2>{{ icons.get(section.slug, '•') }} {{ section.title }}</h2>
+      <p class="muted">{{ section.description }}</p>
+    </div>
+    <input id="settings-search" type="text" placeholder="Поиск по настройкам" style="max-width: 260px">
+  </div>
 
-  <form method="post" action="/g/{{ guild.id }}/settings/{{ section.slug }}" class="form">
+  <form method="post" action="/g/{{ guild.id }}/settings/{{ section.slug }}" class="form" id="settings-form">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
 
     {% for field in section.fields %}
       {% set value = values.get(field.key) %}
-      <div class="field">
+      <div class="field" data-search="{{ (field.label ~ ' ' ~ field.key ~ ' ' ~ field.help)|lower }}">
         <label for="f-{{ field.key }}">{{ field.label }}</label>
         {% if field.help %}<div class="help">{{ field.help }}</div>{% endif %}
 
@@ -73,18 +79,14 @@
         {% elif field.kind == 'channels' %}
           <select id="f-{{ field.key }}" name="{{ field.key }}" multiple size="6">
             {% for channel in channels %}
-              <option value="{{ channel.id }}" {% if channel.id|int in value|default([]) %}selected{% endif %}>
-                {{ channel|channel_label }}
-              </option>
+              <option value="{{ channel.id }}" {% if channel.id|int in value|default([]) %}selected{% endif %}>{{ channel|channel_label }}</option>
             {% endfor %}
           </select>
 
         {% elif field.kind == 'roles' %}
           <select id="f-{{ field.key }}" name="{{ field.key }}" multiple size="6">
             {% for role in roles %}
-              <option value="{{ role.id }}" {% if role.id|int in value|default([]) %}selected{% endif %}>
-                @{{ role.name }}
-              </option>
+              <option value="{{ role.id }}" {% if role.id|int in value|default([]) %}selected{% endif %}>@{{ role.name }}</option>
             {% endfor %}
           </select>
 
@@ -102,15 +104,27 @@
           <textarea id="f-{{ field.key }}" name="{{ field.key }}" rows="4">{{ value or '' }}</textarea>
 
         {% else %}
-          <input id="f-{{ field.key }}" type="text" name="{{ field.key }}" value="{{ value or '' }}"
-                 placeholder="{{ field.placeholder }}">
+          <input id="f-{{ field.key }}" type="text" name="{{ field.key }}" value="{{ value or '' }}" placeholder="{{ field.placeholder }}">
         {% endif %}
       </div>
     {% endfor %}
 
     <div class="form-actions">
-      <button class="btn btn-primary" type="submit">Сохранить раздел</button>
+      <button class="btn btn-primary" type="submit">💾 Сохранить раздел</button>
+      <a class="btn btn-ghost" href="/g/{{ guild.id }}">Отмена</a>
     </div>
   </form>
 </section>
+
+<script>
+  const search = document.getElementById('settings-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      const query = search.value.trim().toLowerCase();
+      document.querySelectorAll('[data-search]').forEach((node) => {
+        node.style.display = !query || node.dataset.search.includes(query) ? '' : 'none';
+      });
+    });
+  }
+</script>
 {% endblock %}

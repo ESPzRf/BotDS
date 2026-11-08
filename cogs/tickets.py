@@ -16,7 +16,6 @@ from core.embeds import (
     COLOR_MUTED,
     COLOR_PRIMARY,
     COLOR_SUCCESS,
-    COLOR_WARNING,
     base_embed,
     success_embed,
     warning_embed,
@@ -308,12 +307,22 @@ class Tickets(commands.Cog):
         except discord.HTTPException as exc:
             raise UserError(f"Не удалось создать канал тикета: {exc}") from exc
 
-        ticket_id = await self.bot.repos.tickets.create_ticket(
-            guild.id,
-            panel.id,
-            channel.id,
-            member.id,
-        )
+        try:
+            ticket_id = await self.bot.repos.tickets.create_ticket(
+                guild.id,
+                panel.id,
+                channel.id,
+                member.id,
+            )
+        except Exception as exc:  # noqa: BLE001 - чаще всего гонка unique-индекса
+            try:
+                await channel.delete(reason="Не удалось создать тикет")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            existing = await self.bot.repos.tickets.open_ticket_for(guild.id, member.id)
+            if existing is not None:
+                raise UserError(f"У вас уже есть открытый тикет: <#{existing.channel_id}>.") from exc
+            raise UserError("Не удалось создать тикет. Попробуйте ещё раз.") from exc
         ticket = await self.bot.repos.tickets.get_ticket(ticket_id)
         if ticket is None:  # pragma: no cover
             raise UserError("Не удалось создать запись тикета.")
