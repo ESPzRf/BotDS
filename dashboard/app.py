@@ -864,6 +864,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 "autorole",
                 current=current,
                 enabled=enabled,
+                human_ids={entry.role_id for entry in current if entry.kind == "human"},
+                bot_ids={entry.role_id for entry in current if entry.kind == "bot"},
                 dangerous_role_ids=dangerous,
                 job_id=request.query_params.get("job"),
             ),
@@ -901,7 +903,31 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         action = str(form.get("action", "")).strip()
         repo = request.app.state.repos.autoroles
         try:
-            if action == "add":
+            if action == "save":
+                role_map = {int(item["id"]): item for item in data["roles"]}
+                selected: dict[str, list[int]] = {}
+                for kind, field in (("human", "roles"), ("bot", "bot_roles")):
+                    ids: list[int] = []
+                    for raw in form.getlist(field):
+                        try:
+                            role_id = int(str(raw))
+                        except ValueError as exc:
+                            raise ValueError("Некорректная роль.") from exc
+                        role = role_map.get(role_id)
+                        if role is None:
+                            raise ValueError("Одна из ролей не найдена на сервере.")
+                        danger = dangerous_role_label(role)
+                        if danger:
+                            raise ValueError(
+                                f"Роль @{role['name']} имеет опасные права ({danger})."
+                            )
+                        ids.append(role_id)
+                    selected[kind] = ids
+                actor_id = int((session_user(request) or {}).get("id", 0))
+                await repo.replace_kind(guild_id, "human", selected["human"], actor_id)
+                await repo.replace_kind(guild_id, "bot", selected["bot"], actor_id)
+                flash(request, "Автороли сохранены.")
+            elif action == "add":
                 role_id = int(str(form.get("role_id", "")))
                 role = next((item for item in data["roles"] if int(item["id"]) == role_id), None)
                 if role is None:

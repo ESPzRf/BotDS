@@ -351,6 +351,26 @@ class DashboardAppTests(unittest.TestCase):
         page = self.client.get("/g/1/autorole")
         self.assertIn("Moderator", page.text)
 
+    def test_autorole_bulk_save(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/autorole")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/autorole",
+            data={
+                "csrf": token.group(1),
+                "action": "save",
+                "roles": ["20"],
+                "bot_roles": ["20"],
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        page = self.client.get("/g/1/autorole")
+        self.assertIn("multi-select-chip", page.text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,31 +3,145 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Автовыдача ролей</h1>
-    <p class="muted">Роли, которые бот выдаёт новым участникам или ботам при входе.</p>
+    <div class="eyebrow">Настройки сервера</div>
+    <h1>Автороли</h1>
+    <p class="muted">Роли, которые бот выдаёт новым участникам и ботам.</p>
+  </div>
+  <form method="post" action="/g/{{ guild.id }}/autorole" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="toggle">
+    <label class="switch" title="Включить или выключить автовыдачу">
+      <input type="checkbox" name="enabled" {% if enabled %}checked{% endif %} onchange="this.form.submit()">
+      <span>{{ 'Включено' if enabled else 'Выключено' }}</span>
+    </label>
+  </form>
+</div>
+
+<div class="notice">
+  <span class="notice-icon">⚠️</span>
+  <div>
+    Когда включён Discord Onboarding, новые участники сначала должны принять правила.
+    Автороли выдаются только после этого. Убедитесь, что выбранные роли не имеют
+    административных прав — дашборд такие роли блокирует.
   </div>
 </div>
 
-<section class="panel">
-  <h2>Статус</h2>
-  <form method="post" class="inline-form">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="action" value="toggle">
-    <label class="switch">
-      <input type="checkbox" name="enabled" {% if enabled %}checked{% endif %}>
-      <span>Автовыдача включена</span>
-    </label>
-    <button class="btn" type="submit">Сохранить</button>
-  </form>
-</section>
+<form method="post" action="/g/{{ guild.id }}/autorole" class="panel">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="save">
+
+  <div class="section-label">Автороли</div>
+  <div class="multi-select" data-multi>
+    <select name="roles" multiple hidden>
+      {% for role in roles %}
+        {% if role.id|int != guild.id %}
+          <option value="{{ role.id }}" {% if role.id|int in human_ids %}selected{% endif %}>@{{ role.name }}</option>
+        {% endif %}
+      {% endfor %}
+    </select>
+    <div class="multi-select-control" role="button" tabindex="0">
+      <div class="multi-select-chips">
+        {% set ns = namespace(any=false) %}
+        {% for role in roles %}
+          {% if role.id|int in human_ids and role.id|int != guild.id %}
+            {% set ns.any = true %}
+            <span class="multi-select-chip" data-role="{{ role.id }}">
+              <span class="role-dot" style="background: {{ role|role_color }}"></span>
+              @{{ role.name }}
+              <button type="button" data-remove="{{ role.id }}" aria-label="Убрать">×</button>
+            </span>
+          {% endif %}
+        {% endfor %}
+        {% if not ns.any %}<span class="multi-select-placeholder">Выберите роли для новых участников</span>{% endif %}
+      </div>
+      <span class="multi-select-caret">⌄</span>
+    </div>
+    <div class="multi-select-menu" hidden>
+      <div class="multi-select-section">Доступные роли</div>
+      {% for role in roles %}
+        {% if role.id|int != guild.id %}
+          {% set selected = role.id|int in human_ids %}
+          {% set danger = role.id|int in dangerous_role_ids %}
+          <label class="multi-select-option {% if danger and not selected %}disabled{% endif %}">
+            <input type="checkbox" value="{{ role.id }}" data-name="{{ role.name }}" data-color="{{ role|role_color }}"
+                   {% if selected %}checked{% endif %} {% if danger and not selected %}disabled{% endif %}>
+            <span class="role-dot" style="background: {{ role|role_color }}"></span>
+            <span>@{{ role.name }}</span>
+            {% if danger %}<span class="premium-badge">опасные права</span>{% endif %}
+          </label>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="section-label">Автороли для ботов</div>
+  <div class="multi-select" data-multi>
+    <select name="bot_roles" multiple hidden>
+      {% for role in roles %}
+        {% if role.id|int != guild.id %}
+          <option value="{{ role.id }}" {% if role.id|int in bot_ids %}selected{% endif %}>@{{ role.name }}</option>
+        {% endif %}
+      {% endfor %}
+    </select>
+    <div class="multi-select-control" role="button" tabindex="0">
+      <div class="multi-select-chips">
+        {% set ns = namespace(any=false) %}
+        {% for role in roles %}
+          {% if role.id|int in bot_ids and role.id|int != guild.id %}
+            {% set ns.any = true %}
+            <span class="multi-select-chip" data-role="{{ role.id }}">
+              <span class="role-dot" style="background: {{ role|role_color }}"></span>
+              @{{ role.name }}
+              <button type="button" data-remove="{{ role.id }}" aria-label="Убрать">×</button>
+            </span>
+          {% endif %}
+        {% endfor %}
+        {% if not ns.any %}<span class="multi-select-placeholder">Выберите роли для ботов</span>{% endif %}
+      </div>
+      <span class="multi-select-caret">⌄</span>
+    </div>
+    <div class="multi-select-menu" hidden>
+      <div class="multi-select-section">Доступные роли</div>
+      {% for role in roles %}
+        {% if role.id|int != guild.id %}
+          {% set selected = role.id|int in bot_ids %}
+          {% set danger = role.id|int in dangerous_role_ids %}
+          <label class="multi-select-option {% if danger and not selected %}disabled{% endif %}">
+            <input type="checkbox" value="{{ role.id }}" data-name="{{ role.name }}" data-color="{{ role|role_color }}"
+                   {% if selected %}checked{% endif %} {% if danger and not selected %}disabled{% endif %}>
+            <span class="role-dot" style="background: {{ role|role_color }}"></span>
+            <span>@{{ role.name }}</span>
+            {% if danger %}<span class="premium-badge">опасные права</span>{% endif %}
+          </label>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="premium-row">
+    <div>
+      <strong>Назначение роли по указанному приглашению</strong>
+      <div class="muted" style="font-size: 12px; margin-top: 4px">Отслеживание приглашений и выдача роли пригласившему.</div>
+    </div>
+    <span class="premium-badge">СКОРО</span>
+  </div>
+
+  <div class="form-actions" style="margin-top: 20px">
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+  </div>
+</form>
 
 <section class="panel">
-  <h2>Применить сейчас</h2>
-  <p class="muted">Выдать выбранные роли всем текущим участникам. Операция идёт через очередь задач.</p>
-  <form method="post" action="/g/{{ guild.id }}/autorole/apply" class="inline-form" onsubmit="return confirm('Выдать автороли всем текущим участникам?')">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <button class="btn btn-primary" type="submit">Применить ко всем</button>
-  </form>
+  <div class="panel-head">
+    <div>
+      <h2>Применить сейчас</h2>
+      <p class="muted">Выдать выбранные роли всем текущим участникам. Операция идёт через очередь задач.</p>
+    </div>
+    <form method="post" action="/g/{{ guild.id }}/autorole/apply" class="inline" onsubmit="return confirm('Выдать автороли всем текущим участникам?')">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn" type="submit">Применить ко всем</button>
+    </form>
+  </div>
 </section>
 
 {% if job_id %}
@@ -57,59 +171,70 @@
   </script>
 {% endif %}
 
-<section class="panel">
-  <h2>Добавить роль</h2>
-  <form method="post" class="inline-form">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="action" value="add">
-    <select name="role_id" required>
-      <option value="">Выберите роль</option>
-      {% for role in roles %}
-        <option value="{{ role.id }}" {% if role.id|int in dangerous_role_ids %}disabled{% endif %}>
-          @{{ role.name }}{% if role.id|int in dangerous_role_ids %} ⚠️ опасные права{% endif %}
-        </option>
-      {% endfor %}
-    </select>
-    <select name="kind">
-      <option value="human">Людям</option>
-      <option value="bot">Ботам</option>
-    </select>
-    <button class="btn btn-primary" type="submit">Добавить</button>
-  </form>
-  <p class="help">Роли с административными правами и правами модерации заблокированы — это защита от случайной выдачи доступа.</p>
-</section>
+<script>
+  document.querySelectorAll('[data-multi]').forEach((root) => {
+    const select = root.querySelector('select');
+    const control = root.querySelector('.multi-select-control');
+    const chips = root.querySelector('.multi-select-chips');
+    const menu = root.querySelector('.multi-select-menu');
+    const placeholder = 'Выберите роли';
 
-<section class="panel">
-  <h2>Текущие автороли</h2>
-  {% if current %}
-    <table class="table">
-      <thead><tr><th>Роль</th><th>Кому</th><th></th></tr></thead>
-      <tbody>
-      {% for item in current %}
-        {% set role = role_map.get(item.role_id) %}
-        <tr>
-          <td>
-            {% if role %}
-              <span class="role-dot" style="background: {{ role|role_color }}"></span> @{{ role.name }}
-            {% else %}
-              <span class="muted">роль {{ item.role_id }} удалена</span>
-            {% endif %}
-          </td>
-          <td>{{ 'ботам' if item.kind == 'bot' else 'людям' }}</td>
-          <td class="right">
-            <form method="post" class="inline">
-              <input type="hidden" name="csrf" value="{{ csrf_token }}">
-              <input type="hidden" name="action" value="remove">
-              <input type="hidden" name="role_id" value="{{ item.role_id }}">
-              <button class="btn btn-danger btn-small" type="submit">Удалить</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="muted">Авторолей пока нет.</p>
-  {% endif %}
-</section>
+    function renderChips() {
+      chips.innerHTML = '';
+      let any = false;
+      select.querySelectorAll('option:checked').forEach((option) => {
+        any = true;
+        const checkbox = menu.querySelector(`input[value="${option.value}"]`);
+        const chip = document.createElement('span');
+        chip.className = 'multi-select-chip';
+        chip.dataset.role = option.value;
+        const dot = document.createElement('span');
+        dot.className = 'role-dot';
+        dot.style.background = checkbox ? checkbox.dataset.color : '#99aab5';
+        const label = document.createElement('span');
+        label.textContent = option.textContent;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', 'Убрать');
+        remove.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (checkbox) checkbox.checked = false;
+          option.selected = false;
+          renderChips();
+        });
+        chip.append(dot, label, remove);
+        chips.append(chip);
+      });
+      if (!any) {
+        const empty = document.createElement('span');
+        empty.className = 'multi-select-placeholder';
+        empty.textContent = placeholder;
+        chips.append(empty);
+      }
+    }
+
+    control.addEventListener('click', (event) => {
+      event.stopPropagation();
+      menu.hidden = !menu.hidden;
+    });
+    control.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        menu.hidden = !menu.hidden;
+      }
+    });
+    menu.addEventListener('click', (event) => event.stopPropagation());
+    menu.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const option = select.querySelector(`option[value="${checkbox.value}"]`);
+        if (option) option.selected = checkbox.checked;
+        renderChips();
+      });
+    });
+    document.addEventListener('click', () => { menu.hidden = true; });
+    renderChips();
+  });
+</script>
 {% endblock %}

@@ -249,6 +249,22 @@ class AutoroleRepo:
             )
         return [Autorole(role_id=int(row["role_id"]), kind=str(row["kind"])) for row in rows]
 
+    async def replace_kind(
+        self,
+        guild_id: int,
+        kind: str,
+        role_ids: list[int],
+        added_by: int | None = None,
+    ) -> None:
+        """Заменяет набор авторолей одного типа (люди или боты)."""
+
+        await self.db.execute(
+            "DELETE FROM autoroles WHERE guild_id = ? AND kind = ?",
+            (guild_id, kind),
+        )
+        for role_id in dict.fromkeys(role_ids):
+            await self.add(guild_id, role_id, kind, added_by)
+
 
 # ---------------------------------------------------------------------------
 
