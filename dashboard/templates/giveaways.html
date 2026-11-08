@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — розыгрыши{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Развлечения</div>
+    <h1>Розыгрыши</h1>
+    <p class="muted">Запуск, завершение и перевыбор победителей. Команда <code>/giveaway</code> тоже работает.</p>
+  </div>
+</div>
+
+{% if job_id %}
+  <div class="toast warning" id="job-status">Задача #{{ job_id }} выполняется…</div>
+{% endif %}
+
+{% if can_manage %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Новый розыгрыш</h2>
+  </div>
+  <form method="post" action="/g/{{ guild.id }}/giveaways/start" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <div class="field">
+        <label for="giveaway-channel">Канал</label>
+        <select id="giveaway-channel" name="channel_id" required>
+          <option value="">Выберите канал</option>
+          {% for channel in channels %}<option value="{{ channel.id }}">{{ channel|channel_label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="giveaway-prize">Приз</label>
+        <input id="giveaway-prize" name="prize" maxlength="200" placeholder="Например, Nitro" required>
+      </div>
+      <div class="field">
+        <label for="giveaway-duration">Длительность</label>
+        <input id="giveaway-duration" name="duration" value="1h" placeholder="10m, 1h, 2d" required>
+      </div>
+      <div class="field">
+        <label for="giveaway-winners">Победителей</label>
+        <input id="giveaway-winners" name="winners" type="number" min="1" max="20" value="1">
+      </div>
+    </div>
+    <div class="field">
+      <label for="giveaway-role">Обязательная роль</label>
+      <select id="giveaway-role" name="required_role_id">
+        <option value="">— не использовать —</option>
+        {% for role in roles %}<option value="{{ role.id }}">@{{ role.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Запустить</button></div>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>История розыгрышей</h2>
+  </div>
+  {% if giveaways %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Приз</th><th>Канал</th><th>Статус</th><th>Итоги</th><th></th></tr></thead>
+      <tbody>
+      {% for item in giveaways %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td>{{ item.prize }}</td>
+          <td>
+            {% set channel = channel_map.get(item.channel_id) %}
+            {{ channel|channel_label if channel else 'ID ' ~ item.channel_id }}
+          </td>
+          <td><span class="badge {{ 'off' if item.ended else 'on' }}">{{ 'завершён' if item.ended else 'активен' }}</span></td>
+          <td class="muted">{{ item.ends_at.strftime('%d.%m %H:%M') if item.ends_at else '—' }}</td>
+          <td class="right">
+            {% if can_manage %}
+              {% if not item.ended %}
+                <form method="post" action="/g/{{ guild.id }}/giveaways/action" class="inline" onsubmit="return confirm('Завершить розыгрыш?')">
+                  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                  <input type="hidden" name="action" value="end">
+                  <input type="hidden" name="giveaway_id" value="{{ item.id }}">
+                  <button class="btn btn-danger btn-small" type="submit">Завершить</button>
+                </form>
+              {% else %}
+                <form method="post" action="/g/{{ guild.id }}/giveaways/action" class="inline">
+                  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                  <input type="hidden" name="action" value="reroll">
+                  <input type="hidden" name="giveaway_id" value="{{ item.id }}">
+                  <button class="btn btn-small" type="submit">Перевыбрать</button>
+                </form>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Розыгрышей пока нет.</p>
+  {% endif %}
+</section>
+
+{% if job_id %}
+<script>
+  const jobId = {{ job_id|int }};
+  const statusBox = document.getElementById('job-status');
+  async function pollJob() {
+    try {
+      const response = await fetch('/g/{{ guild.id }}/api/jobs/' + jobId, {headers: {'Accept': 'application/json'}});
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.status === 'done') {
+        statusBox.className = 'toast success';
+        statusBox.textContent = 'Готово.';
+        clearInterval(timer);
+        setTimeout(() => location.reload(), 1200);
+      } else if (data.status === 'error') {
+        statusBox.className = 'toast error';
+        statusBox.textContent = 'Ошибка: ' + (data.error || 'не удалось выполнить действие');
+        clearInterval(timer);
+      }
+    } catch (_) {}
+  }
+  const timer = setInterval(pollJob, 2000);
+  pollJob();
+</script>
+{% endif %}
+{% endblock %}

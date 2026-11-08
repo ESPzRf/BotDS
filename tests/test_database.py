@@ -211,6 +211,43 @@ class SelfRoleTests(DatabaseTestCase):
         self.assertEqual(await self.repos.selfroles.groups(panel_id), {})
 
 
+class JobTests(DatabaseTestCase):
+    async def test_job_lifecycle(self) -> None:
+        job_id = await self.repos.jobs.enqueue(1, 99, "moderation.warn", {"user_id": 42})
+        job = await self.repos.jobs.get(job_id)
+        assert job is not None
+        self.assertEqual((job.status, job.attempts), ("queued", 0))
+
+        claimed = await self.repos.jobs.claim_next()
+        assert claimed is not None
+        self.assertEqual(claimed.id, job_id)
+        self.assertEqual(claimed.status, "running")
+        self.assertEqual(claimed.attempts, 1)
+
+        await self.repos.jobs.complete(job_id, {"warning_id": 5})
+        done = await self.repos.jobs.get(job_id)
+        assert done is not None
+        self.assertEqual(done.status, "done")
+        self.assertEqual(done.result, {"warning_id": 5})
+
+    async def test_job_retry_and_failure(self) -> None:
+        job_id = await self.repos.jobs.enqueue(1, 99, "moderation.warn", {})
+        await self.repos.jobs.claim_next()
+        await self.repos.jobs.fail(job_id, "temporary", retry=True)
+        job = await self.repos.jobs.get(job_id)
+        assert job is not None
+        self.assertEqual(job.status, "queued")
+        self.assertEqual(job.error, "temporary")
+
+    async def test_running_jobs_are_requeued_after_restart(self) -> None:
+        job_id = await self.repos.jobs.enqueue(1, 99, "moderation.warn", {})
+        await self.repos.jobs.claim_next()
+        await self.repos.jobs.requeue_running()
+        job = await self.repos.jobs.get(job_id)
+        assert job is not None
+        self.assertEqual(job.status, "queued")
+
+
 class WordTests(DatabaseTestCase):
     async def test_words_crud(self) -> None:
         self.assertTrue(await self.repos.words.add(1, "дурак", 10))

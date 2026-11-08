@@ -425,9 +425,9 @@ class Tickets(commands.Cog):
             )
             return
 
-        await self._close_ticket(guild, ticket, member, interaction)
+        await self.close_ticket_service(guild, ticket, member, interaction)
 
-    async def _close_ticket(
+    async def close_ticket_service(
         self,
         guild: discord.Guild,
         ticket: Ticket,

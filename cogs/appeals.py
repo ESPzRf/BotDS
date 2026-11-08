@@ -123,57 +123,36 @@ class Appeals(commands.Cog):
 
     # ---------------------------------------------------------------- review
 
-    async def review(self, interaction: discord.Interaction, appeal_id: int, *, approve: bool) -> None:
-        guild = interaction.guild
-        member = interaction.user
-        if guild is None or not isinstance(member, discord.Member):
-            return
+    async def review_service(
+        self,
+        guild: discord.Guild,
+        actor: discord.Member,
+        appeal_id: int,
+        *,
+        approve: bool,
+    ) -> str:
         if not (
-            member.guild_permissions.manage_guild
-            or member.guild_permissions.moderate_members
-            or member.guild_permissions.manage_messages
+            actor.guild_permissions.manage_guild
+            or actor.guild_permissions.moderate_members
+            or actor.guild_permissions.manage_messages
         ):
-            await interaction.response.send_message(
-                embed=warning_embed("Рассматривать апелляции может только поддержка."),
-                ephemeral=True,
-            )
-            return
+            raise UserError("Рассматривать апелляции может только поддержка.")
 
         appeal = await self.bot.repos.appeals.get(appeal_id)
         if appeal is None or appeal.guild_id != guild.id:
-            await interaction.response.send_message(
-                embed=warning_embed("Апелляция не найдена."),
-                ephemeral=True,
-            )
-            return
-        if appeal.user_id == member.id:
-            await interaction.response.send_message(
-                embed=warning_embed("Нельзя рассматривать собственную апелляцию."),
-                ephemeral=True,
-            )
-            return
+            raise UserError("Апелляция не найдена.")
+        if appeal.user_id == actor.id:
+            raise UserError("Нельзя рассматривать собственную апелляцию.")
         if appeal.status != "pending":
-            await interaction.response.send_message(
-                embed=warning_embed("Эта апелляция уже рассмотрена."),
-                ephemeral=True,
-            )
-            return
+            raise UserError("Эта апелляция уже рассмотрена.")
 
         warning = await self.bot.repos.warnings.get(appeal.warning_id)
         if warning is None or warning.guild_id != guild.id:
-            await interaction.response.send_message(
-                embed=warning_embed("Предупреждение не найдено."),
-                ephemeral=True,
-            )
-            return
+            raise UserError("Предупреждение не найдено.")
 
         status = "approved" if approve else "denied"
-        if not await self.bot.repos.appeals.set_status(appeal.id, status, member.id):
-            await interaction.response.send_message(
-                embed=warning_embed("Эту апелляцию уже рассмотрел другой модератор."),
-                ephemeral=True,
-            )
-            return
+        if not await self.bot.repos.appeals.set_status(appeal.id, status, actor.id):
+            raise UserError("Эту апелляцию уже рассмотрел другой модератор.")
 
         if approve:
             await self.bot.repos.warnings.deactivate(warning.id, guild.id)
@@ -185,8 +164,6 @@ class Appeals(commands.Cog):
         if updated is not None:
             user = self.bot.get_user(appeal.user_id)
             await self._edit_message(updated, self._embed(updated, warning, user))
-
-        await interaction.response.send_message(embed=success_embed(status_text), ephemeral=True)
 
         try:
             user = self.bot.get_user(appeal.user_id) or await self.bot.fetch_user(appeal.user_id)
@@ -203,8 +180,24 @@ class Appeals(commands.Cog):
         log_embed = base_embed(title="⚖️ Решение по апелляции", color=COLOR_MUTED)
         log_embed.add_field(name="Апелляция", value=f"#{appeal.id}", inline=True)
         log_embed.add_field(name="Решение", value="одобрена" if approve else "отклонена", inline=True)
-        log_embed.add_field(name="Рассмотрел", value=f"{member} (`{member.id}`)", inline=True)
+        log_embed.add_field(name="Рассмотрел", value=f"{actor} (`{actor.id}`)", inline=True)
         await self._send_log(guild, log_embed)
+        return status_text
+
+    async def review(self, interaction: discord.Interaction, appeal_id: int, *, approve: bool) -> None:
+        guild = interaction.guild
+        member = interaction.user
+        if guild is None or not isinstance(member, discord.Member):
+            return
+        try:
+            status_text = await self.review_service(guild, member, appeal_id, approve=approve)
+        except UserError as exc:
+            await interaction.response.send_message(
+                embed=warning_embed(exc.message),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(embed=success_embed(status_text), ephemeral=True)
 
     async def _send_log(self, guild: discord.Guild, embed: discord.Embed) -> None:
         channel = await resolve_modlog_channel(self.bot, guild)

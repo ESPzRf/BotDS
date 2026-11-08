@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.name }} — тикеты{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Поддержка</div>
+    <h1>Тикеты</h1>
+    <p class="muted">Открытые обращения и панели. Закрытие выполняется ботом.</p>
+  </div>
+</div>
+
+{% if job_id %}
+  <div class="toast warning" id="job-status">Задача #{{ job_id }} выполняется…</div>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Открытые тикеты ({{ open_tickets|length }})</h2>
+  </div>
+  {% if open_tickets %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Автор</th><th>Канал</th><th>Взял</th><th>Создан</th><th></th></tr></thead>
+      <tbody>
+      {% for ticket in open_tickets %}
+        <tr>
+          <td>#{{ ticket.id }}</td>
+          <td>ID {{ ticket.user_id }}</td>
+          <td>
+            {% set channel = channel_map.get(ticket.channel_id) %}
+            {{ channel|channel_label if channel else 'ID ' ~ ticket.channel_id }}
+          </td>
+          <td>{% if ticket.claimed_by %}ID {{ ticket.claimed_by }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="muted">{{ ticket.created_at.strftime('%d.%m %H:%M') if ticket.created_at else '—' }}</td>
+          <td class="right">
+            {% if can_close %}
+              <form method="post" action="/g/{{ guild.id }}/tickets/close" class="inline" onsubmit="return confirm('Закрыть тикет #{{ ticket.id }}?')">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
+                <button class="btn btn-danger btn-small" type="submit">Закрыть</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Открытых тикетов нет.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Панели тикетов</h2>
+  </div>
+  {% if panels %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Название</th><th>Канал</th><th>Поддержка</th></tr></thead>
+      <tbody>
+      {% for panel in panels %}
+        <tr>
+          <td>#{{ panel.id }}</td>
+          <td>{{ panel.title }}</td>
+          <td>
+            {% set channel = channel_map.get(panel.channel_id) %}
+            {{ channel|channel_label if channel else 'ID ' ~ panel.channel_id }}
+          </td>
+          <td>{% if panel.support_role_id %}@{{ role_map.get(panel.support_role_id, {}).get('name', panel.support_role_id) }}{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Панелей пока нет. Создайте их командой <code>/ticket setup</code>.</p>
+  {% endif %}
+</section>
+
+{% if job_id %}
+<script>
+  const jobId = {{ job_id|int }};
+  const statusBox = document.getElementById('job-status');
+  async function pollJob() {
+    try {
+      const response = await fetch('/g/{{ guild.id }}/api/jobs/' + jobId, {headers: {'Accept': 'application/json'}});
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.status === 'done') {
+        statusBox.className = 'toast success';
+        statusBox.textContent = 'Тикет закрыт.';
+        clearInterval(timer);
+        setTimeout(() => location.reload(), 1200);
+      } else if (data.status === 'error') {
+        statusBox.className = 'toast error';
+        statusBox.textContent = 'Ошибка: ' + (data.error || 'не удалось закрыть тикет');
+        clearInterval(timer);
+      }
+    } catch (_) {}
+  }
+  const timer = setInterval(pollJob, 2000);
+  pollJob();
+</script>
+{% endif %}
+{% endblock %}

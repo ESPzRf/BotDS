@@ -179,6 +179,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             channels = await request.app.state.api.guild_channels(guild_id)
             roles = await request.app.state.api.guild_roles(guild_id)
             user_id = int(user.get("id", 0))
+            member = None
+            permissions = (1 << 3) | (1 << 5)
             if not (cfg.dev_mode and user_id == cfg.dev_user_id):
                 member = await request.app.state.api.guild_member(guild_id, user_id)
                 permissions = _member_permissions(guild, roles, member)
@@ -214,6 +216,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 "stat_channels": _stat_channels(channels),
                 "roles": _selectable_roles(roles),
                 "all_channels": channels,
+                "member": member,
+                "permissions": permissions,
             },
             None,
         )
@@ -234,6 +238,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             "stat_channel_map": {int(channel["id"]): channel for channel in data["stat_channels"]},
             "active": active,
             "section_links": SECTIONS,
+            "permissions": data.get("permissions", 0),
             "guilds": [
                 item for item in (session_user(request) or {}).get("guilds", [])
                 if item.get("allowed")
@@ -485,6 +490,145 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             status_code=303,
         )
 
+    # ----------------------------------------------------------------- tickets
+
+    @app.get("/g/{guild_id}/tickets", response_class=HTMLResponse)
+    async def tickets_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        repos: Repositories = request.app.state.repos
+        panels = await repos.tickets.panels(guild_id)
+        open_tickets = await repos.tickets.open_tickets(guild_id)
+        can_close = bool(
+            int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5) | (1 << 4))
+        )
+        return render(
+            request,
+            "tickets.html",
+            **guild_context(
+                request,
+                data,
+                "tickets",
+                panels=panels,
+                open_tickets=open_tickets,
+                can_close=can_close,
+                job_id=request.query_params.get("job"),
+            ),
+        )
+
+    @app.post("/g/{guild_id}/tickets/close", response_class=HTMLResponse)
+    async def tickets_close(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5) | (1 << 4)):
+            return error_page(request, "Нужно право «Управлять каналами».", 403)
+        try:
+            ticket_id = int(str(form.get("ticket_id", "")))
+        except ValueError:
+            flash(request, "Неверный ID тикета.", "error")
+            return RedirectResponse(f"/g/{guild_id}/tickets", status_code=303)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "ticket.close",
+            {"ticket_id": ticket_id},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/tickets?job={job_id}", status_code=303)
+
+    # --------------------------------------------------------------- giveaways
+
+    @app.get("/g/{guild_id}/giveaways", response_class=HTMLResponse)
+    async def giveaways_page(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        giveaways = await request.app.state.repos.giveaways.recent(guild_id, limit=30)
+        can_manage = bool(int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5)))
+        return render(
+            request,
+            "giveaways.html",
+            **guild_context(
+                request,
+                data,
+                "giveaways",
+                giveaways=giveaways,
+                can_manage=can_manage,
+                job_id=request.query_params.get("job"),
+            ),
+        )
+
+    @app.post("/g/{guild_id}/giveaways/start", response_class=HTMLResponse)
+    async def giveaways_start(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        if not int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5)):
+            return error_page(request, "Нужно право «Управлять сервером».", 403)
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        try:
+            channel_id = int(str(form.get("channel_id", "")))
+            winners = int(str(form.get("winners", "1")))
+        except ValueError:
+            flash(request, "Проверьте канал и количество победителей.", "error")
+            return RedirectResponse(f"/g/{guild_id}/giveaways", status_code=303)
+        required_role_id = form.get("required_role_id")
+        payload = {
+            "channel_id": channel_id,
+            "prize": str(form.get("prize", "")).strip()[:200],
+            "duration": str(form.get("duration", "1h")).strip(),
+            "winners": winners,
+            "required_role_id": int(str(required_role_id)) if required_role_id else None,
+        }
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "giveaway.start",
+            payload,
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/giveaways?job={job_id}", status_code=303)
+
+    @app.post("/g/{guild_id}/giveaways/action", response_class=HTMLResponse)
+    async def giveaways_action(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        if not int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5)):
+            return error_page(request, "Нужно право «Управлять сервером».", 403)
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", ""))
+        if action not in {"end", "reroll"}:
+            flash(request, "Неизвестное действие.", "error")
+            return RedirectResponse(f"/g/{guild_id}/giveaways", status_code=303)
+        try:
+            giveaway_id = int(str(form.get("giveaway_id", "")))
+        except ValueError:
+            flash(request, "Неверный ID розыгрыша.", "error")
+            return RedirectResponse(f"/g/{guild_id}/giveaways", status_code=303)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            f"giveaway.{action}",
+            {"giveaway_id": giveaway_id},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/giveaways?job={job_id}", status_code=303)
+
     # --------------------------------------------------------------- moderation
 
     @app.get("/g/{guild_id}/moderation", response_class=HTMLResponse)
@@ -497,6 +641,23 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         warnings = await repos.warnings.recent(guild_id, limit=25)
         temp_actions = await repos.temp_actions.active_for_guild(guild_id)
         appeals = await repos.appeals.pending(guild_id)
+        jobs = await repos.jobs.recent(guild_id, limit=10)
+        try:
+            members = await request.app.state.api.guild_members(guild_id)
+        except (DiscordAPIError, AttributeError):
+            members = []
+        members = [
+            {
+                "id": str(item.get("user", {}).get("id", "")),
+                "name": item.get("nick")
+                or item.get("user", {}).get("global_name")
+                or item.get("user", {}).get("username")
+                or str(item.get("user", {}).get("id", "")),
+            }
+            for item in members
+            if item.get("user", {}).get("id")
+        ]
+        members.sort(key=lambda item: item["name"].casefold())
         return render(
             request,
             "moderation.html",
@@ -507,7 +668,180 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 warnings=warnings,
                 temp_actions=temp_actions,
                 appeals=appeals,
+                members=members,
+                jobs=jobs,
+                job_id=request.query_params.get("job"),
+                can_warn=bool(int(data.get("permissions", 0)) & ((1 << 40) | (1 << 3))),
+                can_ban=bool(int(data.get("permissions", 0)) & ((1 << 2) | (1 << 3))),
+                can_kick=bool(int(data.get("permissions", 0)) & ((1 << 1) | (1 << 3))),
+                can_appeal=bool(
+                    int(data.get("permissions", 0))
+                    & ((1 << 3) | (1 << 5) | (1 << 13) | (1 << 40))
+                ),
             ),
+        )
+
+    @app.post("/g/{guild_id}/moderation/warn", response_class=HTMLResponse)
+    async def moderation_warn(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data["permissions"]) & ((1 << 40) | (1 << 3)):
+            return error_page(request, "Нужно право «Тайм-аут участников».", 403)
+        try:
+            user_id = int(str(form.get("user_id", "")))
+            reason = str(form.get("reason", "")).strip()[:900]
+        except ValueError:
+            flash(request, "Выберите участника.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "moderation.warn",
+            {"user_id": user_id, "reason": reason},
+        )
+        flash(request, f"Задача на предупреждение создана (#{job_id}).")
+        return RedirectResponse(f"/g/{guild_id}/moderation?job={job_id}", status_code=303)
+
+    @app.post("/g/{guild_id}/moderation/action", response_class=HTMLResponse)
+    async def moderation_action(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "")).strip()
+        permissions = int(data.get("permissions", 0))
+        required = {
+            "timeout": (1 << 40, "Тайм-аут участников"),
+            "ban": (1 << 2, "Бан участников"),
+            "kick": (1 << 1, "Кик участников"),
+        }
+        if action not in required:
+            flash(request, "Неизвестное действие.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        bit, label = required[action]
+        if not permissions & (bit | (1 << 3)):
+            return error_page(request, f"Нужно право «{label}».", 403)
+        try:
+            user_id = int(str(form.get("user_id", "")))
+        except ValueError:
+            flash(request, "Выберите участника.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        payload = {
+            "user_id": user_id,
+            "reason": str(form.get("reason", "")).strip()[:900],
+            "duration": str(form.get("duration", "10m")).strip(),
+        }
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            f"moderation.{action}",
+            payload,
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/moderation?job={job_id}", status_code=303)
+
+    @app.post("/g/{guild_id}/moderation/unwarn", response_class=HTMLResponse)
+    async def moderation_unwarn(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data.get("permissions", 0)) & ((1 << 40) | (1 << 3)):
+            return error_page(request, "Нужно право «Тайм-аут участников».", 403)
+        try:
+            warning_id = int(str(form.get("warning_id", "")))
+        except ValueError:
+            flash(request, "Неверный ID предупреждения.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "moderation.unwarn",
+            {"warning_id": warning_id},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/moderation?job={job_id}", status_code=303)
+
+    @app.post("/g/{guild_id}/moderation/clear", response_class=HTMLResponse)
+    async def moderation_clear(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data.get("permissions", 0)) & ((1 << 40) | (1 << 3)):
+            return error_page(request, "Нужно право «Тайм-аут участников».", 403)
+        try:
+            user_id = int(str(form.get("user_id", "")))
+        except ValueError:
+            flash(request, "Выберите участника.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "moderation.clearwarnings",
+            {"user_id": user_id},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/moderation?job={job_id}", status_code=303)
+
+    @app.post("/g/{guild_id}/moderation/appeal", response_class=HTMLResponse)
+    async def moderation_appeal(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        permissions = int(data.get("permissions", 0))
+        if not permissions & ((1 << 3) | (1 << 5) | (1 << 13) | (1 << 40)):
+            return error_page(request, "Нужны права модерации или управления сообщениями.", 403)
+        try:
+            appeal_id = int(str(form.get("appeal_id", "")))
+        except ValueError:
+            flash(request, "Неверный ID апелляции.", "error")
+            return RedirectResponse(f"/g/{guild_id}/moderation", status_code=303)
+        approve = str(form.get("decision", "")) == "approve"
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "appeal.review",
+            {"appeal_id": appeal_id, "approve": approve},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/moderation?job={job_id}", status_code=303)
+
+    @app.get("/g/{guild_id}/api/jobs/{job_id}")
+    async def job_api(request: Request, guild_id: int, job_id: int) -> Response:
+        user = session_user(request)
+        if user is None:
+            return login_redirect(request)
+        if not has_guild_access(user, guild_id):
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        job = await request.app.state.repos.jobs.get(job_id)
+        if job is None or job.guild_id != guild_id:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(
+            {
+                "id": job.id,
+                "status": job.status,
+                "error": job.error,
+                "result": job.result,
+            }
         )
 
     # --------------------------------------------------------------- autorole
@@ -531,8 +865,29 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 current=current,
                 enabled=enabled,
                 dangerous_role_ids=dangerous,
+                job_id=request.query_params.get("job"),
             ),
         )
+
+    @app.post("/g/{guild_id}/autorole/apply", response_class=HTMLResponse)
+    async def autorole_apply(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5) | (1 << 28)):
+            return error_page(request, "Нужно право «Управлять ролями».", 403)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "autorole.apply",
+            {},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/autorole?job={job_id}", status_code=303)
 
     @app.post("/g/{guild_id}/autorole", response_class=HTMLResponse)
     async def autorole_save(request: Request, guild_id: int) -> Response:
@@ -899,8 +1254,28 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         return render(
             request,
             "stats.html",
-            **guild_context(request, data, "stats", stats_channels=channels, live=live),
+            **guild_context(request, data, "stats", stats_channels=channels, live=live, job_id=request.query_params.get("job")),
         )
+
+    @app.post("/g/{guild_id}/stats/refresh", response_class=HTMLResponse)
+    async def stats_refresh(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        if not int(data.get("permissions", 0)) & ((1 << 3) | (1 << 5)):
+            return error_page(request, "Нужно право «Управлять сервером».", 403)
+        job_id = await request.app.state.repos.jobs.enqueue(
+            guild_id,
+            int((session_user(request) or {}).get("id", 0)),
+            "stats.refresh",
+            {},
+        )
+        flash(request, f"Задача #{job_id} создана.")
+        return RedirectResponse(f"/g/{guild_id}/stats?job={job_id}", status_code=303)
 
     @app.get("/g/{guild_id}/api/stats")
     async def stats_api(request: Request, guild_id: int) -> Response:

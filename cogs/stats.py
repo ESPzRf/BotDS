@@ -81,6 +81,19 @@ class Stats(commands.Cog):
         for item in channels:
             await self._update_channel(item)
 
+    async def refresh_guild(self, guild_id: int) -> int:
+        """Обновляет каналы статистики одного сервера по запросу из дашборда."""
+
+        if not await self.bot.settings.get_bool(guild_id, "stats_enabled", True):
+            return 0
+        self._human_bot_cache.pop(guild_id, None)
+        channels = await self.bot.repos.stats.list(guild_id)
+        updated = 0
+        for item in channels:
+            await self._update_channel(item)
+            updated += 1
+        return updated
+
     async def _enabled_anywhere(self) -> bool:
         for guild in self.bot.guilds:
             if await self.bot.settings.get_bool(guild.id, "stats_enabled", True):

@@ -69,6 +69,8 @@ class DashboardSchemaTests(unittest.TestCase):
             "settings.html",
             "autorole.html",
             "moderation.html",
+            "tickets.html",
+            "giveaways.html",
             "automod.html",
             "access.html",
             "selfrole.html",
@@ -138,6 +140,8 @@ class DashboardAppTests(unittest.TestCase):
             "/g/1/settings?section=security",
             "/g/1/autorole",
             "/g/1/moderation",
+            "/g/1/tickets",
+            "/g/1/giveaways",
             "/g/1/automod",
             "/g/1/access",
             "/g/1/selfrole",
@@ -216,6 +220,120 @@ class DashboardAppTests(unittest.TestCase):
         response = self.client.get("/g/1/api/stats")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["members"], 12)
+
+    def test_warn_job_is_enqueued(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/moderation")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/moderation/warn",
+            data={"csrf": token.group(1), "user_id": "42", "reason": "Тест"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("job=", response.headers["location"])
+        job_id = int(response.headers["location"].split("job=")[-1])
+        job = self.client.get(f"/g/1/api/jobs/{job_id}")
+        self.assertEqual(job.status_code, 200)
+        self.assertEqual(job.json()["status"], "queued")
+
+    def test_timeout_job_is_enqueued(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/moderation")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/moderation/action",
+            data={
+                "csrf": token.group(1),
+                "action": "timeout",
+                "user_id": "42",
+                "duration": "10m",
+                "reason": "Тест",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        page = self.client.get("/g/1/moderation")
+        self.assertIn("moderation.timeout", page.text)
+
+    def test_unwarn_job_is_enqueued(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/moderation")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/moderation/unwarn",
+            data={"csrf": token.group(1), "warning_id": "1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        page = self.client.get("/g/1/moderation")
+        self.assertIn("moderation.unwarn", page.text)
+
+    def test_ticket_close_job(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/moderation")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/tickets/close",
+            data={"csrf": token.group(1), "ticket_id": "1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("job=", response.headers["location"])
+
+    def test_appeal_job(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/moderation")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/moderation/appeal",
+            data={"csrf": token.group(1), "appeal_id": "1", "decision": "approve"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+
+    def test_giveaway_start_job(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/giveaways")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/giveaways/start",
+            data={
+                "csrf": token.group(1),
+                "channel_id": "10",
+                "prize": "Nitro",
+                "duration": "1h",
+                "winners": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("job=", response.headers["location"])
+
+    def test_autorole_apply_job(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/autorole")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/autorole/apply",
+            data={"csrf": token.group(1)},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
 
     def test_autorole_add(self) -> None:
         page = self.client.get("/g/1/autorole")

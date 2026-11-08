@@ -120,15 +120,15 @@ class Giveaways(commands.Cog):
         except Exception:  # noqa: BLE001 - цикл не должен умирать
             log.exception("Не удалось проверить завершённые розыгрыши")
 
-    async def _finish(self, giveaway: Giveaway) -> None:
+    async def _finish(self, giveaway: Giveaway) -> list[int] | None:
         guild = self.bot.get_guild(giveaway.guild_id)
         if guild is None:
-            return
+            return None
         channel = guild.get_channel(giveaway.channel_id)
         if not isinstance(channel, discord.TextChannel):
-            return
+            return None
         if not await self.bot.repos.giveaways.finish(giveaway.id):
-            return
+            return None
 
         entries = await self.bot.repos.giveaways.entries(giveaway.id)
         winners = pick_winners(entries, giveaway.winners_count)
@@ -162,6 +162,46 @@ class Giveaways(commands.Cog):
                 pass
 
         log.info("Розыгрыш #%s завершён, победителей: %s", giveaway.id, len(winners))
+        return winners
+
+    async def finish_service(self, guild: discord.Guild, giveaway_id: int) -> list[int]:
+        """Завершает розыгрыш из дашборда и возвращает победителей."""
+
+        giveaway = await self.bot.repos.giveaways.get(giveaway_id)
+        if giveaway is None or giveaway.guild_id != guild.id:
+            raise UserError(f"Розыгрыш #{giveaway_id} не найден.")
+        if giveaway.ended:
+            raise UserError("Розыгрыш уже завершён.")
+        winners = await self._finish(giveaway)
+        updated = await self.bot.repos.giveaways.get(giveaway_id)
+        if winners is None or updated is None or not updated.ended:
+            raise UserError("Не удалось завершить розыгрыш: проверьте канал и права бота.")
+        return winners
+
+    async def reroll_service(self, guild: discord.Guild, giveaway_id: int) -> list[int]:
+        giveaway = await self.bot.repos.giveaways.get(giveaway_id)
+        if giveaway is None or giveaway.guild_id != guild.id:
+            raise UserError(f"Розыгрыш #{giveaway_id} не найден.")
+        if not giveaway.ended:
+            raise UserError("Сначала завершите розыгрыш.")
+        entries = await self.bot.repos.giveaways.entries(giveaway.id)
+        winners = pick_winners(entries, giveaway.winners_count)
+        if not winners:
+            raise UserError("В розыгрыше нет участников.")
+        channel = guild.get_channel(giveaway.channel_id)
+        if isinstance(channel, discord.TextChannel):
+            try:
+                if giveaway.message_id:
+                    message = await channel.fetch_message(giveaway.message_id)
+                    await message.edit(embed=await self._embed(giveaway, winners=winners), view=None)
+                await channel.send(
+                    content="🎉 Новые победители: "
+                    + ", ".join(f"<@{user_id}>" for user_id in winners),
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                log.debug("Не удалось объявить новых победителей", exc_info=True)
+        return winners
 
     async def join(self, interaction: discord.Interaction, giveaway_id: int) -> None:
         guild = interaction.guild
@@ -204,6 +244,60 @@ class Giveaways(commands.Cog):
 
         await interaction.response.send_message(embed=success_embed(text), ephemeral=True)
 
+    async def start_service(
+        self,
+        guild: discord.Guild,
+        host_id: int,
+        channel_id: int,
+        prize: str,
+        seconds: int,
+        winners: int,
+        required_role_id: int | None = None,
+    ) -> tuple[int, datetime]:
+        """Создаёт розыгрыш и отправляет сообщение. Общий путь для / и дашборда."""
+
+        if not 60 <= seconds <= MAX_GIVEAWAY_SECONDS:
+            raise UserError("Длительность розыгрыша — от 1 минуты до 30 дней.")
+        if not 1 <= winners <= 20:
+            raise UserError("Победителей должно быть от 1 до 20.")
+        prize = prize.strip()[:200]
+        if not prize:
+            raise UserError("Укажите приз.")
+
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            raise UserError("Розыгрыш можно запустить только в текстовом канале.")
+        if required_role_id is not None and guild.get_role(required_role_id) is None:
+            raise UserError("Роль для участия не найдена.")
+        if guild.me is None:
+            raise UserError("Бот недоступен на сервере.")
+        permissions = channel.permissions_for(guild.me)
+        if not permissions.send_messages or not permissions.embed_links:
+            raise UserError(f"У бота нет прав писать embed-сообщения в {channel.mention}.")
+
+        ends_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        giveaway_id = await self.bot.repos.giveaways.create(
+            guild.id,
+            channel.id,
+            prize,
+            winners,
+            host_id,
+            required_role_id,
+            ends_at,
+        )
+        giveaway = await self.bot.repos.giveaways.get(giveaway_id)
+        if giveaway is None:  # pragma: no cover
+            raise UserError("Не удалось создать розыгрыш.")
+        view = GiveawayView(self, giveaway_id)
+        message = await channel.send(
+            embed=await self._embed(giveaway),
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        self.bot.add_view(view)
+        await self.bot.repos.giveaways.set_message(giveaway_id, message.id)
+        return giveaway_id, ends_at
+
     # --------------------------------------------------------------- commands
 
     @giveaway.command(name="start", description="Запустить розыгрыш")
@@ -240,35 +334,17 @@ class Giveaways(commands.Cog):
         target = channel or interaction.channel
         if not isinstance(target, discord.TextChannel):
             raise UserError("Розыгрыш можно запустить только в текстовом канале.")
-        permissions = target.permissions_for(guild.me)
-        if not permissions.send_messages or not permissions.embed_links:
-            raise UserError(f"У бота нет прав писать embed-сообщения в {target.mention}.")
 
         await interaction.response.defer(ephemeral=True, thinking=True)
-
-        ends_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-        giveaway_id = await self.bot.repos.giveaways.create(
-            guild.id,
-            target.id,
-            prize.strip()[:200],
-            winners,
+        giveaway_id, ends_at = await self.start_service(
+            guild,
             interaction.user.id,
+            target.id,
+            prize,
+            seconds,
+            winners,
             required_role.id if required_role else None,
-            ends_at,
         )
-        giveaway = await self.bot.repos.giveaways.get(giveaway_id)
-        if giveaway is None:  # pragma: no cover
-            raise UserError("Не удалось создать розыгрыш.")
-
-        view = GiveawayView(self, giveaway_id)
-        message = await target.send(
-            embed=await self._embed(giveaway),
-            view=view,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        self.bot.add_view(view)
-        await self.bot.repos.giveaways.set_message(giveaway_id, message.id)
-
         await interaction.followup.send(
             embed=success_embed(
                 f"Розыгрыш **#{giveaway_id}** запущен в {target.mention}.\n"

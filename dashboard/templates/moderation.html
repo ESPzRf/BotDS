@@ -10,6 +10,83 @@
   <a class="btn" href="/g/{{ guild.id }}/settings?section=warnings">⚙️ Настройки предупреждений</a>
 </div>
 
+{% if job_id %}
+  <div class="toast warning" id="job-status">Задача #{{ job_id }} выполняется…</div>
+{% endif %}
+
+<datalist id="moderation-members">
+  {% for member in members %}<option value="{{ member.id }}">{{ member.name }}</option>{% endfor %}
+</datalist>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Выдать предупреждение</h2>
+      <p class="muted">Действие выполнит бот. Команда <code>/warn</code> тоже продолжает работать.</p>
+    </div>
+  </div>
+  {% if can_warn %}
+    <form method="post" action="/g/{{ guild.id }}/moderation/warn" class="inline-form">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input name="user_id" list="moderation-members" placeholder="Участник: имя или ID" required>
+      <input name="reason" placeholder="Причина" maxlength="900" required>
+      <button class="btn btn-primary" type="submit">Выдать</button>
+    </form>
+  {% else %}
+    <p class="muted">Для выдачи предупреждения нужно право «Тайм-аут участников».</p>
+  {% endif %}
+</section>
+
+{% if can_warn or can_ban or can_kick %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Быстрое действие</h2>
+      <p class="muted">Тайм-аут, бан или кик через очередь задач.</p>
+    </div>
+  </div>
+  <form method="post" action="/g/{{ guild.id }}/moderation/action" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input name="user_id" list="moderation-members" placeholder="Участник: имя или ID" required>
+    <select name="action">
+      {% if can_warn %}<option value="timeout">Тайм-аут</option>{% endif %}
+      {% if can_ban %}<option value="ban">Бан</option>{% endif %}
+      {% if can_kick %}<option value="kick">Кик</option>{% endif %}
+    </select>
+    <input name="duration" value="10m" placeholder="10m / 1h / 2d" style="max-width: 110px">
+    <input name="reason" placeholder="Причина" maxlength="900">
+    <button class="btn btn-danger" type="submit">Применить</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Последние задачи</h2>
+      <p class="muted">Действия из дашборда выполняются ботом и попадают в очередь.</p>
+    </div>
+  </div>
+  {% if jobs %}
+    <table class="table">
+      <thead><tr><th>ID</th><th>Тип</th><th>Статус</th><th>Создана</th><th>Результат</th></tr></thead>
+      <tbody>
+      {% for job in jobs %}
+        <tr>
+          <td>#{{ job.id }}</td>
+          <td><code>{{ job.type }}</code></td>
+          <td><span class="badge {{ 'on' if job.status == 'done' else ('off' if job.status == 'error' else 'warn') }}">{{ job.status }}</span></td>
+          <td class="muted">{{ job.created_at.strftime('%d.%m %H:%M') }}</td>
+          <td class="muted">{% if job.error %}{{ job.error[:120] }}{% elif job.result %}выполнено{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Задач пока нет.</p>
+  {% endif %}
+</section>
+
 <section class="panel">
   <div class="panel-head">
     <h2>Предупреждения</h2>
@@ -17,7 +94,7 @@
   </div>
   {% if warnings %}
     <table class="table">
-      <thead><tr><th>ID</th><th>Участник</th><th>Причина</th><th>Модератор</th><th>Статус</th><th>Когда</th></tr></thead>
+      <thead><tr><th>ID</th><th>Участник</th><th>Причина</th><th>Модератор</th><th>Статус</th><th>Когда</th><th></th></tr></thead>
       <tbody>
       {% for item in warnings %}
         <tr>
@@ -27,10 +104,26 @@
           <td>{% if item.moderator_id %}ID {{ item.moderator_id }}{% else %}автомод{% endif %}</td>
           <td><span class="badge {{ 'warn' if item.active else 'off' }}">{{ 'активно' if item.active else 'снято' }}</span></td>
           <td class="muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '—' }}</td>
+          <td class="right">
+            {% if item.active and can_warn %}
+              <form method="post" action="/g/{{ guild.id }}/moderation/unwarn" class="inline">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="warning_id" value="{{ item.id }}">
+                <button class="btn btn-danger btn-small" type="submit">Снять</button>
+              </form>
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
+    {% if can_warn %}
+      <form method="post" action="/g/{{ guild.id }}/moderation/clear" class="inline-form" style="margin-top: 12px">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input name="user_id" list="moderation-members" placeholder="Снять все предупреждения у участника" required>
+        <button class="btn btn-danger btn-small" type="submit">Очистить все</button>
+      </form>
+    {% endif %}
   {% else %}
     <p class="muted">Предупреждений пока нет.</p>
   {% endif %}
@@ -66,7 +159,7 @@
   </div>
   {% if appeals %}
     <table class="table">
-      <thead><tr><th>ID</th><th>Предупреждение</th><th>Участник</th><th>Причина</th></tr></thead>
+      <thead><tr><th>ID</th><th>Предупреждение</th><th>Участник</th><th>Причина</th><th></th></tr></thead>
       <tbody>
       {% for item in appeals %}
         <tr>
@@ -74,6 +167,22 @@
           <td>#{{ item.warning_id }}</td>
           <td>ID {{ item.user_id }}</td>
           <td>{{ item.reason[:180] }}{% if item.reason|length > 180 %}…{% endif %}</td>
+          <td class="right">
+            {% if can_appeal %}
+              <form method="post" action="/g/{{ guild.id }}/moderation/appeal" class="inline">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="appeal_id" value="{{ item.id }}">
+                <input type="hidden" name="decision" value="approve">
+                <button class="btn btn-success btn-small" type="submit">Одобрить</button>
+              </form>
+              <form method="post" action="/g/{{ guild.id }}/moderation/appeal" class="inline">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="appeal_id" value="{{ item.id }}">
+                <input type="hidden" name="decision" value="deny">
+                <button class="btn btn-danger btn-small" type="submit">Отклонить</button>
+              </form>
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
       </tbody>
@@ -82,4 +191,30 @@
     <p class="muted">Ожидающих апелляций нет.</p>
   {% endif %}
 </section>
+
+{% if job_id %}
+<script>
+  const jobId = {{ job_id|int }};
+  const statusBox = document.getElementById('job-status');
+  async function pollJob() {
+    try {
+      const response = await fetch('/g/{{ guild.id }}/api/jobs/' + jobId, {headers: {'Accept': 'application/json'}});
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.status === 'done') {
+        statusBox.className = 'toast success';
+        statusBox.textContent = 'Действие выполнено.';
+        clearInterval(timer);
+        setTimeout(() => location.reload(), 1200);
+      } else if (data.status === 'error') {
+        statusBox.className = 'toast error';
+        statusBox.textContent = 'Ошибка: ' + (data.error || 'не удалось выполнить действие');
+        clearInterval(timer);
+      }
+    } catch (_) {}
+  }
+  const timer = setInterval(pollJob, 2000);
+  pollJob();
+</script>
+{% endif %}
 {% endblock %}

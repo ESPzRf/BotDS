@@ -12,6 +12,32 @@ from core.utils import clamp
 MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
 
 
+def moderator_problem(
+    guild: discord.Guild,
+    actor: discord.Member,
+    target: discord.Member,
+) -> str | None:
+    """Общая проверка иерархии для слэш-команд и задач дашборда."""
+
+    if target.id == actor.id:
+        return "Нельзя применить действие к самому себе."
+    if target.id == guild.owner_id:
+        return "Нельзя применить действие к владельцу сервера."
+    if target.bot:
+        return "Нельзя модерировать бота."
+
+    if actor.id != guild.owner_id:
+        if target.guild_permissions.administrator:
+            return "Нельзя модерировать администратора сервера."
+        if actor.top_role <= target.top_role:
+            return "Ваша роль должна быть выше роли участника."
+
+    me = guild.me
+    if me is not None and target.top_role >= me.top_role:
+        return "Роль участника выше или равна роли бота — действие невозможно."
+    return None
+
+
 async def ensure_can_moderate(interaction: discord.Interaction, target: discord.Member) -> None:
     """Проверяет, что модератор вправе применить действие к участнику."""
 
@@ -20,22 +46,9 @@ async def ensure_can_moderate(interaction: discord.Interaction, target: discord.
     if guild is None or not isinstance(actor, discord.Member):
         raise UserError("Команда доступна только на сервере.")
 
-    if target.id == actor.id:
-        raise UserError("Нельзя применить действие к самому себе.")
-    if target.id == guild.owner_id:
-        raise UserError("Нельзя применить действие к владельцу сервера.")
-    if target.bot:
-        raise UserError("Нельзя модерировать бота.")
-
-    if actor.id != guild.owner_id:
-        if target.guild_permissions.administrator:
-            raise UserError("Нельзя модерировать администратора сервера.")
-        if actor.top_role <= target.top_role:
-            raise UserError("Ваша роль должна быть выше роли участника.")
-
-    me = guild.me
-    if me is not None and target.top_role >= me.top_role:
-        raise UserError("Роль участника выше или равна роли бота — действие невозможно.")
+    problem = moderator_problem(guild, actor, target)
+    if problem:
+        raise UserError(problem)
 
 
 def ensure_bot_hierarchy(guild: discord.Guild, target: discord.Member | discord.User) -> None:

@@ -27,6 +27,7 @@ from core.database import Database  # noqa: E402
 # Порядок важен из-за внешних ключей.
 TABLES: tuple[str, ...] = (
     "guild_settings",
+    "bot_jobs",
     "selfrole_panels",
     "selfrole_options",
     "selfrole_exclusive",
@@ -49,6 +50,7 @@ TABLES: tuple[str, ...] = (
 )
 
 ID_TABLES: tuple[str, ...] = (
+    "bot_jobs",
     "selfrole_panels",
     "warnings",
     "ticket_panels",

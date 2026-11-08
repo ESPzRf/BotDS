@@ -6,6 +6,25 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
+-- Очередь действий из дашборда. Выполняет отдельный воркер в процессе бота.
+CREATE TABLE IF NOT EXISTS bot_jobs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    actor_id   INTEGER,
+    type       TEXT    NOT NULL,
+    payload    TEXT    NOT NULL,
+    status     TEXT    NOT NULL DEFAULT 'queued', -- queued | running | done | error
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    result     TEXT,
+    error      TEXT,
+    created_at TEXT    NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_jobs_queue
+    ON bot_jobs (status, id);
+
 -- Настройки сервера в формате ключ -> JSON-значение.
 CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id   INTEGER NOT NULL,

@@ -47,6 +47,12 @@
         <a class="{{ 'active' if active == 'moderation' else '' }}" href="/g/{{ guild.id }}/moderation">
           <span class="nav-icon">⚖️</span> Модерация
         </a>
+        <a class="{{ 'active' if active == 'tickets' else '' }}" href="/g/{{ guild.id }}/tickets">
+          <span class="nav-icon">🎫</span> Тикеты
+        </a>
+        <a class="{{ 'active' if active == 'giveaways' else '' }}" href="/g/{{ guild.id }}/giveaways">
+          <span class="nav-icon">🎉</span> Розыгрыши
+        </a>
 
         <span class="nav-label">Модули</span>
         <a class="{{ 'active' if active == 'settings' else '' }}" href="/g/{{ guild.id }}/settings">

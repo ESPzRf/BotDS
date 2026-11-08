@@ -9,11 +9,20 @@
   <a class="btn" href="/g/{{ guild.id }}/settings?section=misc">Общие настройки</a>
 </div>
 
+{% if job_id %}
+  <div class="toast warning" id="job-status">Задача #{{ job_id }} выполняется…</div>
+{% endif %}
+
 <div class="stat-grid">
   <div class="stat"><span class="stat-value" id="live-members">{{ live.members }}</span><span>участников на сервере</span></div>
   <div class="stat"><span class="stat-value" id="live-boosts">{{ live.boosts }}</span><span>бустов</span></div>
   <div class="stat"><span class="stat-value">{{ stats_channels|length }}</span><span>каналов статистики</span></div>
 </div>
+
+<form method="post" action="/g/{{ guild.id }}/stats/refresh" class="inline-form" style="margin-bottom: 16px">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <button class="btn" type="submit">Обновить каналы сейчас</button>
+</form>
 
 <section class="panel">
   <h2>Добавить или изменить канал</h2>
@@ -80,4 +89,29 @@
   }
   setInterval(refreshStats, 30000);
 </script>
+{% if job_id %}
+<script>
+  const jobId = {{ job_id|int }};
+  const statusBox = document.getElementById('job-status');
+  async function pollJob() {
+    try {
+      const response = await fetch('/g/{{ guild.id }}/api/jobs/' + jobId, {headers: {'Accept': 'application/json'}});
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.status === 'done') {
+        statusBox.className = 'toast success';
+        statusBox.textContent = 'Каналы статистики обновлены.';
+        clearInterval(timer);
+        setTimeout(() => location.reload(), 1200);
+      } else if (data.status === 'error') {
+        statusBox.className = 'toast error';
+        statusBox.textContent = 'Ошибка: ' + (data.error || 'не удалось обновить статистику');
+        clearInterval(timer);
+      }
+    } catch (_) {}
+  }
+  const timer = setInterval(pollJob, 2000);
+  pollJob();
+</script>
+{% endif %}
 {% endblock %}

@@ -164,11 +164,21 @@ class AutoRole(commands.Cog):
         if guild is None:
             raise UserError("Команда доступна только на сервере.")
 
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        added, failed = await self.apply_service(guild)
+        await interaction.followup.send(
+            embed=base_embed(
+                title="✅ Автовыдача применена",
+                description=f"Выдано ролей: **{added}**\nОшибок: **{failed}**",
+                color=COLOR_SUCCESS,
+            ),
+            ephemeral=True,
+        )
+
+    async def apply_service(self, guild: discord.Guild) -> tuple[int, int]:
         entries = await self.bot.repos.autoroles.list(guild.id)
         if not entries:
             raise UserError("Сначала добавьте роли через /autorole add.")
-
-        await interaction.response.defer(ephemeral=True, thinking=True)
 
         human_roles = [
             role
@@ -199,15 +209,7 @@ class AutoRole(commands.Cog):
                     added += 1
             if index % 25 == 0:
                 await asyncio.sleep(0)
-
-        await interaction.followup.send(
-            embed=base_embed(
-                title="✅ Автовыдача применена",
-                description=f"Выдано ролей: **{added}**\nОшибок: **{failed}**",
-                color=COLOR_SUCCESS,
-            ),
-            ephemeral=True,
-        )
+        return added, failed
 
     @autorole.command(name="enabled", description="Включить или выключить автовыдачу")
     @app_commands.describe(state="True — включить, False — выключить")

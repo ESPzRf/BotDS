@@ -40,6 +40,22 @@ def from_iso(value: str | None) -> datetime | None:
     return parsed
 
 
+@dataclass(slots=True)
+class BotJob:
+    id: int
+    guild_id: int
+    actor_id: int | None
+    type: str
+    payload: dict[str, Any]
+    status: str
+    attempts: int
+    result: dict[str, Any] | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
 # ---------------------------------------------------------------------------
 # Модели
 # ---------------------------------------------------------------------------
@@ -1153,6 +1169,13 @@ class GiveawayRepo:
         rows = await self.db.fetchall("SELECT * FROM giveaways WHERE ended = 0 ORDER BY id ASC")
         return [g for g in (_giveaway_from_row(row) for row in rows) if g is not None]
 
+    async def recent(self, guild_id: int, limit: int = 20) -> list[Giveaway]:
+        rows = await self.db.fetchall(
+            "SELECT * FROM giveaways WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+            (guild_id, limit),
+        )
+        return [g for g in (_giveaway_from_row(row) for row in rows) if g is not None]
+
     async def due(self, now_iso: str) -> list[Giveaway]:
         rows = await self.db.fetchall(
             "SELECT * FROM giveaways WHERE ended = 0 AND ends_at <= ? ORDER BY ends_at ASC",
@@ -1595,6 +1618,123 @@ def _command_rule_from_row(row: Any | None) -> CommandRule | None:
 # ---------------------------------------------------------------------------
 
 
+class JobRepo:
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    async def enqueue(
+        self,
+        guild_id: int,
+        actor_id: int | None,
+        job_type: str,
+        payload: dict[str, Any],
+    ) -> int:
+        return await self.db.insert(
+            """
+            INSERT INTO bot_jobs (guild_id, actor_id, type, payload, status, attempts, created_at)
+            VALUES (?, ?, ?, ?, 'queued', 0, ?)
+            """,
+            (guild_id, actor_id, job_type, json.dumps(payload, ensure_ascii=False), to_iso(utcnow())),
+        )
+
+    async def get(self, job_id: int) -> BotJob | None:
+        row = await self.db.fetchone("SELECT * FROM bot_jobs WHERE id = ?", (job_id,))
+        return _job_from_row(row)
+
+    async def claim_next(self) -> BotJob | None:
+        row = await self.db.fetchone(
+            "SELECT id FROM bot_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1"
+        )
+        if row is None:
+            return None
+        job_id = int(row["id"])
+        changed = await self.db.execute(
+            """
+            UPDATE bot_jobs
+            SET status = 'running', attempts = attempts + 1, started_at = ?
+            WHERE id = ? AND status = 'queued'
+            """,
+            (to_iso(utcnow()), job_id),
+        )
+        if changed <= 0:
+            return None
+        return await self.get(job_id)
+
+    async def complete(self, job_id: int, result: dict[str, Any] | None = None) -> None:
+        await self.db.execute(
+            """
+            UPDATE bot_jobs
+            SET status = 'done', result = ?, error = NULL, finished_at = ?
+            WHERE id = ?
+            """,
+            (json.dumps(result, ensure_ascii=False) if result else None, to_iso(utcnow()), job_id),
+        )
+
+    async def fail(self, job_id: int, error: str, *, retry: bool = False) -> None:
+        if retry:
+            row = await self.db.fetchone("SELECT attempts FROM bot_jobs WHERE id = ?", (job_id,))
+            attempts = int(row["attempts"]) if row else 0
+            if attempts < 3:
+                await self.db.execute(
+                    """
+                    UPDATE bot_jobs
+                    SET status = 'queued', error = ?, started_at = NULL
+                    WHERE id = ?
+                    """,
+                    (error[:2000], job_id),
+                )
+                return
+        await self.db.execute(
+            """
+            UPDATE bot_jobs
+            SET status = 'error', error = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (error[:2000], to_iso(utcnow()), job_id),
+        )
+
+    async def recent(self, guild_id: int, limit: int = 20) -> list[BotJob]:
+        rows = await self.db.fetchall(
+            "SELECT * FROM bot_jobs WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+            (guild_id, limit),
+        )
+        return [job for job in (_job_from_row(row) for row in rows) if job is not None]
+
+    async def requeue_running(self) -> int:
+        """Возвращает зависшие задачи после падения/перезапуска бота."""
+
+        return await self.db.execute(
+            "UPDATE bot_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'"
+        )
+
+
+def _job_from_row(row: sqlite3.Row | None) -> BotJob | None:
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["payload"])
+    except (TypeError, ValueError):
+        payload = {}
+    try:
+        result = json.loads(row["result"]) if row["result"] else None
+    except (TypeError, ValueError):
+        result = None
+    return BotJob(
+        id=int(row["id"]),
+        guild_id=int(row["guild_id"]),
+        actor_id=int(row["actor_id"]) if row["actor_id"] is not None else None,
+        type=str(row["type"]),
+        payload=payload if isinstance(payload, dict) else {},
+        status=str(row["status"]),
+        attempts=int(row["attempts"]),
+        result=result if isinstance(result, dict) else None,
+        error=str(row["error"]) if row["error"] is not None else None,
+        created_at=from_iso(row["created_at"]) or utcnow(),
+        started_at=from_iso(row["started_at"]),
+        finished_at=from_iso(row["finished_at"]),
+    )
+
+
 @dataclass(slots=True)
 class Repositories:
     warnings: WarningRepo
@@ -1611,6 +1751,7 @@ class Repositories:
     shop: ShopRepo
     captcha: CaptchaRepo
     access: CommandAccessRepo
+    jobs: JobRepo
 
 
 def build_repositories(db: Database) -> Repositories:
@@ -1629,4 +1770,5 @@ def build_repositories(db: Database) -> Repositories:
         shop=ShopRepo(db),
         captcha=CaptchaRepo(db),
         access=CommandAccessRepo(db),
+        jobs=JobRepo(db),
     )
