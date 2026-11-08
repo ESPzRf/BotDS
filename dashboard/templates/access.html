@@ -15,11 +15,20 @@
     <div class="grid-2">
       <div class="field">
         <label for="target">Команда или список</label>
-        <input id="target" name="target" list="preset-list" placeholder="moderator или warn" required>
-        <datalist id="preset-list">
-          {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
-        </datalist>
-        <div class="help">Доступны списки: {{ preset_names|join(', ') }}. Можно указать точную команду, например <code>warn</code>.</div>
+        <select id="target" name="target" required>
+          <option value="">Выберите команду или список</option>
+          <optgroup label="Готовые списки">
+            {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+          </optgroup>
+          {% for group, items in commands_by_group.items() %}
+            <optgroup label="/{{ group }}">
+              {% for item in items %}
+                <option value="{{ item.name }}">/{{ item.name }}{% if item.description %} — {{ item.description[:70] }}{% endif %}</option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+        <div class="help">Можно выбрать готовый список, группу или точную команду.</div>
       </div>
       <div class="field">
         <label for="action">Действие</label>
@@ -41,8 +50,12 @@
         </select>
       </div>
       <div class="field">
-        <label for="user_id">ID пользователя</label>
-        <input id="user_id" name="user_id" inputmode="numeric" placeholder="123456789012345678">
+        <label for="user_id">Пользователь</label>
+        <input id="user_id" name="user_id" list="member-list" inputmode="numeric" placeholder="Выберите из списка или введите ID">
+        <datalist id="member-list">
+          {% for member in members %}<option value="{{ member.id }}">{{ member.name }}</option>{% endfor %}
+        </datalist>
+        {% if not members %}<div class="help">Список участников недоступен — введите ID вручную.</div>{% endif %}
       </div>
     </div>
     <div class="form-actions"><button class="btn btn-primary" type="submit">Применить</button></div>

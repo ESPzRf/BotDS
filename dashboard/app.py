@@ -16,7 +16,7 @@ from typing import Any, AsyncIterator
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -36,6 +36,7 @@ from dashboard.auth import (
     verify_csrf,
 )
 from dashboard.config import DashboardConfig
+from dashboard.commands import COMMANDS_BY_GROUP, COMMAND_NAMES
 from dashboard.discord_api import DiscordAPI, DiscordAPIError
 from dashboard.schema import SECTION_BY_SLUG, SECTIONS, apply_section, dangerous_role_label
 
@@ -637,6 +638,22 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             return response
         assert data is not None
         rules = await request.app.state.repos.access.rules(guild_id)
+        try:
+            members = await request.app.state.api.guild_members(guild_id)
+        except (DiscordAPIError, AttributeError):
+            members = []
+        members = [
+            {
+                "id": str(item.get("user", {}).get("id", "")),
+                "name": item.get("nick")
+                or item.get("user", {}).get("global_name")
+                or item.get("user", {}).get("username")
+                or str(item.get("user", {}).get("id", "")),
+            }
+            for item in members
+            if item.get("user", {}).get("id")
+        ]
+        members.sort(key=lambda item: item["name"].casefold())
         return render(
             request,
             "access.html",
@@ -647,6 +664,9 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
                 rules=rules,
                 presets=COMMAND_PRESETS,
                 preset_names=sorted(COMMAND_PRESETS),
+                commands_by_group=COMMANDS_BY_GROUP,
+                command_names=COMMAND_NAMES,
+                members=members,
             ),
         )
 
@@ -728,11 +748,140 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             options = await request.app.state.repos.selfroles.options(panel.id)
             groups = await request.app.state.repos.selfroles.groups(panel.id)
             panel_data.append({"panel": panel, "options": options, "groups": groups})
+        dangerous = {int(role["id"]) for role in data["roles"] if dangerous_role_label(role)}
         return render(
             request,
             "selfrole.html",
-            **guild_context(request, data, "selfrole", panels=panel_data),
+            **guild_context(
+                request,
+                data,
+                "selfrole",
+                panels=panel_data,
+                dangerous_role_ids=dangerous,
+            ),
         )
+
+    @app.post("/g/{guild_id}/selfrole", response_class=HTMLResponse)
+    async def selfrole_save(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        form = await request.form()
+        if not verify_csrf(request, form.get("csrf")):
+            return error_page(request, "CSRF-токен неверен. Обновите страницу.", 403)
+        action = str(form.get("action", "create")).strip()
+        repo = request.app.state.repos.selfroles
+        try:
+            if action == "delete":
+                panel_id = int(str(form.get("panel_id", "")))
+                panel = await repo.get_panel(panel_id)
+                if panel is None or panel.guild_id != guild_id:
+                    raise ValueError("Панель не найдена.")
+                if panel.message_id:
+                    try:
+                        await request.app.state.api.delete_message(panel.channel_id, panel.message_id)
+                    except DiscordAPIError as exc:
+                        if exc.status != 404:
+                            raise ValueError("Не удалось удалить сообщение панели в Discord.") from exc
+                    except AttributeError:
+                        pass
+                await repo.delete_panel(panel_id)
+                flash(request, "Панель удалена.")
+                return RedirectResponse(f"/g/{guild_id}/selfrole", status_code=303)
+
+            if action != "create":
+                raise ValueError("Неизвестное действие.")
+
+            channel_id = int(str(form.get("channel_id", "")))
+            if channel_id not in {int(item["id"]) for item in data["channels"]}:
+                raise ValueError("Канал не найден на сервере.")
+            title = str(form.get("title", "")).strip()[:256]
+            if not title:
+                raise ValueError("Введите заголовок панели.")
+            description = str(form.get("description", "")).strip()[:2000] or "Выберите роли кнопками ниже."
+            raw_color = str(form.get("color", "")).strip().lstrip("#")
+            try:
+                color = int(raw_color, 16) & 0xFFFFFF if raw_color else 0x5865F2
+            except ValueError as exc:
+                raise ValueError("Цвет должен быть в формате #5865F2.") from exc
+            role_ids = [int(value) for value in form.getlist("roles") if str(value)]
+            if not role_ids:
+                raise ValueError("Выберите хотя бы одну роль.")
+            if len(role_ids) > 25:
+                raise ValueError("Можно выбрать не более 25 ролей.")
+            role_map = {int(role["id"]): role for role in data["roles"]}
+            selected: list[dict[str, Any]] = []
+            for role_id in role_ids:
+                role = role_map.get(role_id)
+                if role is None:
+                    raise ValueError("Одна из ролей не найдена на сервере.")
+                danger = dangerous_role_label(role)
+                if danger:
+                    raise ValueError(f"Роль @{role['name']} имеет опасные права ({danger}).")
+                selected.append(role)
+
+            panel_id = await repo.create_panel(guild_id, channel_id, title, description, color)
+            for role in selected:
+                await repo.add_option(
+                    panel_id,
+                    int(role["id"]),
+                    label=str(role.get("name", "Роль"))[:80],
+                    style="secondary",
+                )
+            if str(form.get("exclusive", "")) == "on":
+                for role in selected:
+                    await repo.set_group(panel_id, int(role["id"]), "default")
+
+            role_lines = [f"<@&{role['id']}>" for role in selected]
+            embed = {
+                "title": title,
+                "description": description,
+                "color": color,
+                "fields": [
+                    {
+                        "name": "Доступные роли",
+                        "value": "\n".join(role_lines)[:1024],
+                        "inline": False,
+                    }
+                ],
+                "footer": {"text": f"Панель #{panel_id} • нажмите кнопку, чтобы получить или снять роль"},
+            }
+            components = []
+            row: list[dict[str, Any]] = []
+            for role in selected:
+                row.append(
+                    {
+                        "type": 2,
+                        "style": 2,
+                        "label": str(role.get("name", "Роль"))[:80],
+                        "custom_id": f"selfrole:{panel_id}:{role['id']}",
+                    }
+                )
+                if len(row) == 5:
+                    components.append({"type": 1, "components": row})
+                    row = []
+            if row:
+                components.append({"type": 1, "components": row})
+
+            try:
+                message = await request.app.state.api.create_message(
+                    channel_id,
+                    {
+                        "embeds": [embed],
+                        "components": components,
+                        "allowed_mentions": {"parse": []},
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 - не оставляем панель без сообщения
+                await repo.delete_panel(panel_id)
+                raise ValueError(f"Не удалось отправить панель в Discord: {exc}") from exc
+
+            await repo.set_message_id(panel_id, int(message["id"]))
+            flash(request, f"Панель #{panel_id} создана.")
+        except (TypeError, ValueError) as exc:
+            flash(request, str(exc), "error")
+        return RedirectResponse(f"/g/{guild_id}/selfrole", status_code=303)
 
     # ------------------------------------------------------------------ stats
 
@@ -743,10 +892,28 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             return response
         assert data is not None
         channels = await request.app.state.repos.stats.list(guild_id)
+        live = {
+            "members": int(data["guild"].get("member_count") or 0),
+            "boosts": int(data["guild"].get("premium_subscription_count") or 0),
+        }
         return render(
             request,
             "stats.html",
-            **guild_context(request, data, "stats", stats_channels=channels),
+            **guild_context(request, data, "stats", stats_channels=channels, live=live),
+        )
+
+    @app.get("/g/{guild_id}/api/stats")
+    async def stats_api(request: Request, guild_id: int) -> Response:
+        data, response = await load_guild(request, guild_id)
+        if response is not None:
+            return response
+        assert data is not None
+        guild = data["guild"]
+        return JSONResponse(
+            {
+                "members": int(guild.get("member_count") or 0),
+                "boosts": int(guild.get("premium_subscription_count") or 0),
+            }
         )
 
     @app.post("/g/{guild_id}/stats", response_class=HTMLResponse)

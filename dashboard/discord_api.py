@@ -83,6 +83,34 @@ class DiscordAPI:
     async def guild_member(self, guild_id: int, user_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/guilds/{guild_id}/members/{user_id}")
 
+    async def guild_members(self, guild_id: int, limit: int = 5000) -> list[dict[str, Any]]:
+        """Возвращает участников постранично (Discord отдаёт максимум 1000 за раз)."""
+
+        result: list[dict[str, Any]] = []
+        after = 0
+        while len(result) < limit:
+            page = await self._request(
+                "GET",
+                f"/guilds/{guild_id}/members",
+                params={
+                    "limit": min(1000, limit - len(result)),
+                    **({"after": after} if after else {}),
+                },
+            )
+            if not page:
+                break
+            result.extend(page)
+            if len(page) < 1000:
+                break
+            after = int(page[-1]["user"]["id"])
+        return result
+
+    async def create_message(self, channel_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("POST", f"/channels/{channel_id}/messages", json=payload)
+
+    async def delete_message(self, channel_id: int, message_id: int) -> None:
+        await self._request("DELETE", f"/channels/{channel_id}/messages/{message_id}")
+
     async def bot_guilds(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/users/@me/guilds")
 

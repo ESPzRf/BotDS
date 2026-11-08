@@ -3,23 +3,89 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <div class="eyebrow">Модуль</div>
     <h1>Роли по кнопкам</h1>
-    <p class="muted">Панели создаются командами <code>/selfrole build</code> и <code>/selfrole create</code> в Discord. Здесь — просмотр.</p>
+    <p class="muted">Создавайте embed-панели с кнопками прямо здесь. Бот подхватит новые кнопки в течение 30 секунд.</p>
   </div>
 </div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Создать панель</h2>
+      <p class="muted">До 25 ролей. Повторное нажатие кнопки снимает роль.</p>
+    </div>
+  </div>
+  <form method="post" action="/g/{{ guild.id }}/selfrole" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="create">
+    <div class="grid-2">
+      <div class="field">
+        <label for="selfrole-channel">Канал</label>
+        <select id="selfrole-channel" name="channel_id" required>
+          <option value="">Выберите канал</option>
+          {% for channel in channels %}<option value="{{ channel.id }}">{{ channel|channel_label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="selfrole-title">Заголовок</label>
+        <input id="selfrole-title" name="title" maxlength="256" placeholder="Выберите роли" required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="selfrole-description">Описание</label>
+      <textarea id="selfrole-description" name="description" rows="3" maxlength="2000" placeholder="Нажмите кнопку, чтобы получить роль"></textarea>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="selfrole-color">Цвет</label>
+        <input id="selfrole-color" name="color" value="#5865F2" maxlength="7">
+      </div>
+      <div class="field">
+        <label class="switch" style="margin-top: 30px">
+          <input type="checkbox" name="exclusive">
+          <span>Только одна роль из панели</span>
+        </label>
+        <div class="help">При выдаче новой роли остальные роли группы снимаются.</div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="selfrole-roles">Роли</label>
+      <select id="selfrole-roles" name="roles" multiple size="10" required>
+        {% for role in roles %}
+          <option value="{{ role.id }}" {% if role.id|int in dangerous_role_ids %}disabled{% endif %}>
+            @{{ role.name }}{% if role.id|int in dangerous_role_ids %} ⚠️ опасные права{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="help">Опасные роли с административными правами заблокированы.</div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Создать панель</button></div>
+  </form>
+</section>
 
 {% if panels %}
   {% for item in panels %}
     <section class="panel">
-      <h2>{{ item.panel.title }} <span class="muted">#{{ item.panel.id }}</span></h2>
-      <p class="muted">
-        Канал:
-        {% set channel = channel_map.get(item.panel.channel_id) %}
-        {{ channel|channel_label if channel else item.panel.channel_id }}
-        {% if item.panel.message_id %}
-          · <a href="https://discord.com/channels/{{ guild.id }}/{{ item.panel.channel_id }}/{{ item.panel.message_id }}" target="_blank" rel="noopener">открыть сообщение</a>
-        {% endif %}
-      </p>
+      <div class="panel-head">
+        <div>
+          <h2>{{ item.panel.title }} <span class="muted">#{{ item.panel.id }}</span></h2>
+          <p class="muted">
+            Канал:
+            {% set channel = channel_map.get(item.panel.channel_id) %}
+            {{ channel|channel_label if channel else item.panel.channel_id }}
+            {% if item.panel.message_id %}
+              · <a href="https://discord.com/channels/{{ guild.id }}/{{ item.panel.channel_id }}/{{ item.panel.message_id }}" target="_blank" rel="noopener">открыть сообщение</a>
+            {% endif %}
+          </p>
+        </div>
+        <form method="post" action="/g/{{ guild.id }}/selfrole" onsubmit="return confirm('Удалить панель?')">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="panel_id" value="{{ item.panel.id }}">
+          <button class="btn btn-danger btn-small" type="submit">Удалить</button>
+        </form>
+      </div>
       {% if item.options %}
         <table class="table">
           <thead><tr><th>Роль</th><th>Подпись</th><th>Группа</th></tr></thead>
@@ -42,7 +108,7 @@
 {% else %}
   <div class="empty">
     <p>Панелей ролей пока нет.</p>
-    <p class="muted">Создайте панель в Discord командой <code>/selfrole build</code>.</p>
+    <p class="muted">Создайте первую панель формой выше.</p>
   </div>
 {% endif %}
 {% endblock %}

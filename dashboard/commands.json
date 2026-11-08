@@ -1,0 +1,792 @@
+[
+  {
+    "name": "access",
+    "description": "Ограничения команд по ролям и пользователям",
+    "group": "access"
+  },
+  {
+    "name": "access allow-role",
+    "description": "Разрешить команду только указанной роли",
+    "group": "access"
+  },
+  {
+    "name": "access allow-user",
+    "description": "Разрешить команду конкретному пользователю",
+    "group": "access"
+  },
+  {
+    "name": "access deny-role",
+    "description": "Запретить команду указанной роли",
+    "group": "access"
+  },
+  {
+    "name": "access deny-user",
+    "description": "Запретить команду пользователю",
+    "group": "access"
+  },
+  {
+    "name": "access disable",
+    "description": "Полностью отключить команду на сервере",
+    "group": "access"
+  },
+  {
+    "name": "access enable",
+    "description": "Включить команду обратно",
+    "group": "access"
+  },
+  {
+    "name": "access list",
+    "description": "Показать ограничения команд",
+    "group": "access"
+  },
+  {
+    "name": "access presets",
+    "description": "Показать готовые списки команд",
+    "group": "access"
+  },
+  {
+    "name": "access remove-role",
+    "description": "Убрать роль из списка разрешённых",
+    "group": "access"
+  },
+  {
+    "name": "access remove-user",
+    "description": "Убрать пользователя из разрешённых",
+    "group": "access"
+  },
+  {
+    "name": "access reset",
+    "description": "Снять все ограничения с команды",
+    "group": "access"
+  },
+  {
+    "name": "access undeny-role",
+    "description": "Убрать роль из запрещённых",
+    "group": "access"
+  },
+  {
+    "name": "access undeny-user",
+    "description": "Убрать пользователя из запрещённых",
+    "group": "access"
+  },
+  {
+    "name": "antiraid",
+    "description": "Защита от массовых заходов",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid action",
+    "description": "Что делать с новыми аккаунтами во время рейда",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid disable",
+    "description": "Выключить антирейд",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid duration",
+    "description": "Сколько длится режим рейда",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid enable",
+    "description": "Включить антирейд",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid joins",
+    "description": "Сколько входов за окно считаются рейдом",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid lockdown",
+    "description": "Включить режим рейда вручную",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid min-age",
+    "description": "Минимальный возраст аккаунта во время рейда",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid status",
+    "description": "Показать настройки антирейда",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid unlock",
+    "description": "Снять режим рейда",
+    "group": "antiraid"
+  },
+  {
+    "name": "antiraid window",
+    "description": "Окно подсчёта входов в секундах",
+    "group": "antiraid"
+  },
+  {
+    "name": "antispam",
+    "description": "Защита от спама сообщениями",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam action",
+    "description": "Что делать со спамером",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam count",
+    "description": "Сколько сообщений за окно считать спамом",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam disable",
+    "description": "Выключить антиспам",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam enable",
+    "description": "Включить антиспам",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam ignore-channel",
+    "description": "Не проверять канал на спам",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam status",
+    "description": "Показать настройки антиспама",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam timeout",
+    "description": "Длительность тайм-аута за спам в секундах",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam unignore-channel",
+    "description": "Снова проверять канал",
+    "group": "antispam"
+  },
+  {
+    "name": "antispam window",
+    "description": "Окно подсчёта сообщений в секундах",
+    "group": "antispam"
+  },
+  {
+    "name": "appeal",
+    "description": "Подать апелляцию на предупреждение",
+    "group": "appeal"
+  },
+  {
+    "name": "appeals",
+    "description": "Настройка апелляций",
+    "group": "appeals"
+  },
+  {
+    "name": "appeals channel",
+    "description": "Канал для апелляций",
+    "group": "appeals"
+  },
+  {
+    "name": "appeals list",
+    "description": "Ожидающие апелляции",
+    "group": "appeals"
+  },
+  {
+    "name": "automod",
+    "description": "Фильтр запрещённых слов",
+    "group": "automod"
+  },
+  {
+    "name": "automod action",
+    "description": "Что делать при нарушении",
+    "group": "automod"
+  },
+  {
+    "name": "automod add",
+    "description": "Добавить слово в пул запрещённых",
+    "group": "automod"
+  },
+  {
+    "name": "automod clear",
+    "description": "Очистить пул запрещённых слов",
+    "group": "automod"
+  },
+  {
+    "name": "automod disable",
+    "description": "Выключить автомодерацию",
+    "group": "automod"
+  },
+  {
+    "name": "automod enable",
+    "description": "Включить автомодерацию",
+    "group": "automod"
+  },
+  {
+    "name": "automod ignore-channel",
+    "description": "Не проверять сообщения в канале",
+    "group": "automod"
+  },
+  {
+    "name": "automod ignore-role",
+    "description": "Не проверять участников с этой ролью",
+    "group": "automod"
+  },
+  {
+    "name": "automod list",
+    "description": "Показать запрещённые слова",
+    "group": "automod"
+  },
+  {
+    "name": "automod remove",
+    "description": "Убрать слово из пула запрещённых",
+    "group": "automod"
+  },
+  {
+    "name": "automod status",
+    "description": "Показать настройки автомодерации",
+    "group": "automod"
+  },
+  {
+    "name": "automod test",
+    "description": "Проверить текст на запрещённые слова",
+    "group": "automod"
+  },
+  {
+    "name": "automod timeout",
+    "description": "Длительность тайм-аута в минутах",
+    "group": "automod"
+  },
+  {
+    "name": "automod unignore-channel",
+    "description": "Снова проверять канал",
+    "group": "automod"
+  },
+  {
+    "name": "automod unignore-role",
+    "description": "Убрать роль из исключений",
+    "group": "automod"
+  },
+  {
+    "name": "autorole",
+    "description": "Автоматическая выдача ролей новым участникам",
+    "group": "autorole"
+  },
+  {
+    "name": "autorole add",
+    "description": "Добавить роль в автовыдачу",
+    "group": "autorole"
+  },
+  {
+    "name": "autorole apply",
+    "description": "Выдать роли автовыдачи всем текущим участникам",
+    "group": "autorole"
+  },
+  {
+    "name": "autorole enabled",
+    "description": "Включить или выключить автовыдачу",
+    "group": "autorole"
+  },
+  {
+    "name": "autorole list",
+    "description": "Показать роли автовыдачи",
+    "group": "autorole"
+  },
+  {
+    "name": "autorole remove",
+    "description": "Убрать роль из автовыдачи",
+    "group": "autorole"
+  },
+  {
+    "name": "balance",
+    "description": "Показать баланс лояльности",
+    "group": "balance"
+  },
+  {
+    "name": "botinfo",
+    "description": "Информация о боте",
+    "group": "botinfo"
+  },
+  {
+    "name": "buy",
+    "description": "Купить товар за баллы лояльности",
+    "group": "buy"
+  },
+  {
+    "name": "captcha",
+    "description": "Проверка новых участников",
+    "group": "captcha"
+  },
+  {
+    "name": "captcha disable",
+    "description": "Выключить капчу",
+    "group": "captcha"
+  },
+  {
+    "name": "captcha setup",
+    "description": "Включить капчу и выбрать роли",
+    "group": "captcha"
+  },
+  {
+    "name": "captcha status",
+    "description": "Показать настройки капчи",
+    "group": "captcha"
+  },
+  {
+    "name": "clearwarnings",
+    "description": "Снять все предупреждения участника",
+    "group": "clearwarnings"
+  },
+  {
+    "name": "daily",
+    "description": "Получить ежедневную награду лояльности",
+    "group": "daily"
+  },
+  {
+    "name": "giveaway",
+    "description": "Розыгрыши",
+    "group": "giveaway"
+  },
+  {
+    "name": "giveaway end",
+    "description": "Завершить розыгрыш досрочно",
+    "group": "giveaway"
+  },
+  {
+    "name": "giveaway list",
+    "description": "Активные розыгрыши",
+    "group": "giveaway"
+  },
+  {
+    "name": "giveaway reroll",
+    "description": "Перевыбрать победителей",
+    "group": "giveaway"
+  },
+  {
+    "name": "giveaway start",
+    "description": "Запустить розыгрыш",
+    "group": "giveaway"
+  },
+  {
+    "name": "help",
+    "description": "Список команд бота",
+    "group": "help"
+  },
+  {
+    "name": "leaderboard",
+    "description": "Топ участников по опыту или лояльности",
+    "group": "leaderboard"
+  },
+  {
+    "name": "levelconfig",
+    "description": "Настройка уровней и лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig add-loyalty",
+    "description": "Начислить баллы лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig add-xp",
+    "description": "Начислить опыт участнику (накрутка)",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig announce",
+    "description": "Включить или выключить объявления о новом уровне",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig boost-role",
+    "description": "Бонус к опыту и лояльности за роль",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig boost-role-remove",
+    "description": "Убрать бонус роли",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig boosts",
+    "description": "Показать все множители и бонусы",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig channel",
+    "description": "Канал для объявлений о новом уровне",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig cooldown",
+    "description": "Кулдаун между начислениями опыта (в секундах)",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig event",
+    "description": "Временный множитель опыта и лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig event-clear",
+    "description": "Выключить временный множитель",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig ignore-channel",
+    "description": "Не начислять опыт в канале",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig multiplier-booster",
+    "description": "Бонус для бустеров сервера",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig multiplier-loyalty",
+    "description": "Глобальный множитель лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig multiplier-xp",
+    "description": "Глобальный множитель опыта",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig remove-loyalty",
+    "description": "Снять баллы лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig remove-xp",
+    "description": "Снять опыт у участника",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig reset",
+    "description": "Сбросить настройки уровней",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig reward",
+    "description": "Выдавать роль за достижение уровня",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig reward-remove",
+    "description": "Убрать награду за уровень",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig set-loyalty",
+    "description": "Установить точное значение лояльности",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig set-xp",
+    "description": "Установить точное значение опыта",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig status",
+    "description": "Показать настройки уровней",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig unignore-channel",
+    "description": "Снова начислять опыт в канале",
+    "group": "levelconfig"
+  },
+  {
+    "name": "levelconfig xp",
+    "description": "Диапазон опыта за сообщение",
+    "group": "levelconfig"
+  },
+  {
+    "name": "logs",
+    "description": "Настройка логирования сервера",
+    "group": "logs"
+  },
+  {
+    "name": "logs channel",
+    "description": "Канал для логов сервера (без параметра — выключить)",
+    "group": "logs"
+  },
+  {
+    "name": "logs modlog",
+    "description": "Отдельный канал для модерации (предупреждения, баны)",
+    "group": "logs"
+  },
+  {
+    "name": "logs status",
+    "description": "Показать текущие настройки логов",
+    "group": "logs"
+  },
+  {
+    "name": "logs toggle",
+    "description": "Включить или выключить группу событий",
+    "group": "logs"
+  },
+  {
+    "name": "ping",
+    "description": "Проверить задержку бота и базы данных",
+    "group": "ping"
+  },
+  {
+    "name": "rank",
+    "description": "Показать уровень, опыт и лояльность",
+    "group": "rank"
+  },
+  {
+    "name": "selfrole",
+    "description": "Панели с ролями по кнопкам",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole add",
+    "description": "Добавить кнопку с ролью на панель",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole build",
+    "description": "Мастер: выбрать роли и создать embed-панель с кнопками",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole create",
+    "description": "Создать панель с ролями в канале",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole delete",
+    "description": "Удалить панель и её сообщение",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole edit",
+    "description": "Изменить заголовок, описание или цвет панели",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole group",
+    "description": "Сделать роли эксклюзивными: выдача одной снимает другие",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole groups",
+    "description": "Показать эксклюзивные группы панели",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole list",
+    "description": "Список панелей с ролями",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole refresh",
+    "description": "Перерисовать все панели сервера",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole remove",
+    "description": "Убрать кнопку с ролью с панели",
+    "group": "selfrole"
+  },
+  {
+    "name": "selfrole ungroup",
+    "description": "Убрать роль из эксклюзивной группы",
+    "group": "selfrole"
+  },
+  {
+    "name": "settings",
+    "description": "Общие настройки бота на сервере",
+    "group": "settings"
+  },
+  {
+    "name": "settings language",
+    "description": "Язык ответов бота",
+    "group": "settings"
+  },
+  {
+    "name": "settings reset",
+    "description": "Сбросить настройки сервера к значениям по умолчанию",
+    "group": "settings"
+  },
+  {
+    "name": "settings view",
+    "description": "Показать все настройки бота на сервере",
+    "group": "settings"
+  },
+  {
+    "name": "shop",
+    "description": "Магазин за баллы лояльности",
+    "group": "shop"
+  },
+  {
+    "name": "shop add",
+    "description": "Добавить товар в магазин",
+    "group": "shop"
+  },
+  {
+    "name": "shop list",
+    "description": "Показать товары магазина",
+    "group": "shop"
+  },
+  {
+    "name": "shop remove",
+    "description": "Удалить товар из магазина",
+    "group": "shop"
+  },
+  {
+    "name": "stats",
+    "description": "Статистика в голосовых каналах",
+    "group": "stats"
+  },
+  {
+    "name": "stats add",
+    "description": "Добавить канал статистики",
+    "group": "stats"
+  },
+  {
+    "name": "stats disable",
+    "description": "Выключить обновление статистики",
+    "group": "stats"
+  },
+  {
+    "name": "stats enable",
+    "description": "Включить обновление статистики",
+    "group": "stats"
+  },
+  {
+    "name": "stats list",
+    "description": "Список каналов статистики",
+    "group": "stats"
+  },
+  {
+    "name": "stats remove",
+    "description": "Убрать канал из статистики",
+    "group": "stats"
+  },
+  {
+    "name": "tempactions",
+    "description": "Временные наказания",
+    "group": "tempactions"
+  },
+  {
+    "name": "tempactions ban",
+    "description": "Забанить участника на время",
+    "group": "tempactions"
+  },
+  {
+    "name": "tempactions cancel",
+    "description": "Снять временное наказание досрочно",
+    "group": "tempactions"
+  },
+  {
+    "name": "tempactions list",
+    "description": "Активные временные наказания",
+    "group": "tempactions"
+  },
+  {
+    "name": "tempactions mute",
+    "description": "Выдать тайм-аут на время",
+    "group": "tempactions"
+  },
+  {
+    "name": "ticket",
+    "description": "Система обращений в поддержку",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket add",
+    "description": "Добавить участника в текущий тикет",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket close",
+    "description": "Закрыть тикет в текущем канале",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket delete",
+    "description": "Удалить панель тикетов",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket list",
+    "description": "Список открытых тикетов",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket log",
+    "description": "Канал для логов тикетов и транскриптов",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket panels",
+    "description": "Список панелей тикетов",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket remove",
+    "description": "Убрать участника из текущего тикета",
+    "group": "ticket"
+  },
+  {
+    "name": "ticket setup",
+    "description": "Создать панель тикетов в канале",
+    "group": "ticket"
+  },
+  {
+    "name": "unwarn",
+    "description": "Снять предупреждение по ID",
+    "group": "unwarn"
+  },
+  {
+    "name": "warn",
+    "description": "Выдать предупреждение участнику",
+    "group": "warn"
+  },
+  {
+    "name": "warnconfig",
+    "description": "Настройка предупреждений и автонаказаний",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig channel",
+    "description": "Отдельный канал для логов предупреждений",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig dm",
+    "description": "Отправлять предупреждения в личные сообщения",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig escalation",
+    "description": "Добавить автоматическое наказание за N предупреждений",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig escalation-remove",
+    "description": "Убрать порог автонаказания",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig reset",
+    "description": "Сбросить пороги к значениям по умолчанию",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnconfig show",
+    "description": "Показать настройки предупреждений",
+    "group": "warnconfig"
+  },
+  {
+    "name": "warnings",
+    "description": "Показать активные предупреждения участника",
+    "group": "warnings"
+  }
+]

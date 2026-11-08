@@ -38,6 +38,15 @@ class FakeAPI:
             {"id": "20", "name": "Moderator", "color": 3447003, "position": 5, "managed": False},
         ]
 
+    async def guild_members(self, guild_id: int):
+        return [{"user": {"id": "100", "username": "tester"}}]
+
+    async def create_message(self, channel_id: int, payload):
+        return {"id": "999"}
+
+    async def delete_message(self, channel_id: int, message_id: int):
+        return None
+
     async def close(self):
         pass
 
@@ -86,6 +95,12 @@ class DashboardSchemaTests(unittest.TestCase):
         ):
             config = DashboardConfig.load()
         self.assertEqual(config.db_target, ":memory:")
+
+    def test_command_catalog_is_loaded(self) -> None:
+        from dashboard.commands import COMMAND_NAMES
+
+        self.assertIn("warn", COMMAND_NAMES)
+        self.assertIn("levelconfig add-xp", COMMAND_NAMES)
 
 
 @unittest.skipUnless(HAS_DASHBOARD, "зависимости дашборда не установлены")
@@ -174,6 +189,33 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         page = self.client.get("/g/1/settings?section=automod")
         self.assertIn("Включено", page.text)
+
+    def test_selfrole_create(self) -> None:
+        import re
+
+        page = self.client.get("/g/1/selfrole")
+        token = re.search(r'name="csrf" value="([^"]+)"', page.text)
+        self.assertIsNotNone(token)
+        response = self.client.post(
+            "/g/1/selfrole",
+            data={
+                "csrf": token.group(1),
+                "action": "create",
+                "channel_id": "10",
+                "title": "Роли",
+                "description": "Выберите",
+                "roles": ["20"],
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        page = self.client.get("/g/1/selfrole")
+        self.assertIn("Роли", page.text)
+
+    def test_stats_api(self) -> None:
+        response = self.client.get("/g/1/api/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["members"], 12)
 
     def test_autorole_add(self) -> None:
         page = self.client.get("/g/1/autorole")

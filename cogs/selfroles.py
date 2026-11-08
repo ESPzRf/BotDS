@@ -8,7 +8,7 @@ from typing import Optional
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from core.discord_utils import ConfirmView, role_assign_problem
 from core.embeds import (
@@ -341,6 +341,7 @@ class SelfRoles(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._registered: set[int] = set()
 
     async def cog_load(self) -> None:
         """Восстанавливает persistent views после перезапуска бота."""
@@ -359,11 +360,40 @@ class SelfRoles(commands.Cog):
             if view is not None:
                 try:
                     self.bot.add_view(view)
+                    self._registered.add(panel.id)
                     restored += 1
                 except Exception:  # noqa: BLE001 - одна битая панель не должна ломать старт
                     log.exception("Не удалось восстановить панель #%s", panel.id)
 
         log.info("Восстановлено панелей с ролями: %s", restored)
+        if self.bot.is_ready() and not self._sync_loop.is_running():
+            self._sync_loop.start()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self._sync_loop.is_running():
+            self._sync_loop.start()
+
+    def cog_unload(self) -> None:
+        self._sync_loop.cancel()
+
+    @tasks.loop(seconds=30)
+    async def _sync_loop(self) -> None:
+        """Подхватывает панели, созданные из дашборда, без перезапуска бота."""
+
+        try:
+            panels = await self.bot.repos.selfroles.all_panels()
+            for panel in panels:
+                if panel.id in self._registered or not panel.message_id:
+                    continue
+                options = await self.bot.repos.selfroles.options(panel.id)
+                groups = await self.bot.repos.selfroles.groups(panel.id)
+                view = build_panel_view(panel, options, groups)
+                if view is not None:
+                    self.bot.add_view(view)
+                    self._registered.add(panel.id)
+        except Exception:  # noqa: BLE001 - цикл не должен умирать
+            log.exception("Не удалось синхронизировать панели ролей")
 
     # ------------------------------------------------------------------ utils
 
@@ -401,6 +431,7 @@ class SelfRoles(commands.Cog):
                 await message.edit(embed=embed, view=view)
                 if view is not None:
                     self._register_view(view)
+                    self._registered.add(panel.id)
                 return message
             except discord.NotFound:
                 pass
@@ -418,6 +449,7 @@ class SelfRoles(commands.Cog):
 
         if view is not None:
             self._register_view(view)
+            self._registered.add(panel.id)
         await self.bot.repos.selfroles.set_message_id(panel.id, message.id)
         return message
 
